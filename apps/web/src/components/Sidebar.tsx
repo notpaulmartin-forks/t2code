@@ -131,6 +131,7 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "../rpc/serverState";
 import { useSidebarThreadSummaryById } from "../storeSelectors";
+import { DEFAULT_THREAD_TERMINAL_ID } from "../types";
 import type { Project } from "../types";
 const THREAD_PREVIEW_LIMIT = 6;
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
@@ -153,7 +154,6 @@ type SidebarProjectSnapshot = Project & {
 interface TerminalStatusIndicator {
   label: "Terminal process running";
   colorClass: string;
-  pulse: boolean;
 }
 
 interface PrStatusIndicator {
@@ -212,7 +212,6 @@ function terminalStatusFromRunningIds(
   return {
     label: "Terminal process running",
     colorClass: "text-teal-600 dark:text-teal-300/90",
-    pulse: true,
   };
 }
 
@@ -285,8 +284,13 @@ function SidebarThreadRow(props: SidebarThreadRowProps) {
   const thread = useSidebarThreadSummaryById(props.threadId);
   const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[props.threadId]);
   const runningTerminalIds = useTerminalStateStore(
-    (state) =>
-      selectThreadTerminalState(state.terminalStateByThreadId, props.threadId).runningTerminalIds,
+    useShallow((state) => {
+      const { runningTerminalIds } = selectThreadTerminalState(
+        state.terminalStateByThreadId,
+        props.threadId,
+      );
+      return runningTerminalIds.filter((id) => id !== DEFAULT_THREAD_TERMINAL_ID);
+    }),
   );
 
   if (!thread) {
@@ -429,7 +433,7 @@ function SidebarThreadRow(props: SidebarThreadRowProps) {
               title={terminalStatus.label}
               className={`inline-flex items-center justify-center ${terminalStatus.colorClass}`}
             >
-              <TerminalIcon className={`size-3 ${terminalStatus.pulse ? "animate-pulse" : ""}`} />
+              <TerminalIcon className="size-3" />
             </span>
           )}
           <div className="flex min-w-12 justify-end">

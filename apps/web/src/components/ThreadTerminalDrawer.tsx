@@ -897,6 +897,8 @@ export default function ThreadTerminalDrawer({
   const visibleTerminalIds = resolvedTerminalGroups[resolvedActiveGroupIndex]?.terminalIds ?? [
     resolvedActiveTerminalId,
   ];
+  const isDefaultTerminalOnly =
+    normalizedTerminalIds.length === 1 && normalizedTerminalIds[0] === DEFAULT_THREAD_TERMINAL_ID;
   const hasTerminalSidebar = normalizedTerminalIds.length > 1;
   const isSplitView = visibleTerminalIds.length > 1;
   const showGroupHeaders =
@@ -1052,7 +1054,7 @@ export default function ThreadTerminalDrawer({
         />
       ) : null}
 
-      {!hasTerminalSidebar && (
+      {!hasTerminalSidebar && !isDefaultTerminalOnly && (
         <div className="pointer-events-none absolute right-2 top-2 z-20">
           <div className="pointer-events-auto inline-flex items-center overflow-hidden rounded-md border border-border/80 bg-background/70">
             <TerminalActionButton

@@ -18,6 +18,7 @@ import {
 } from "react";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
+import { cn } from "~/lib/utils";
 import { openInPreferredEditor } from "../editorPreferences";
 import {
   extractTerminalLinks,
@@ -727,6 +728,7 @@ interface ThreadTerminalDrawerProps {
   runtimeEnv?: Record<string, string>;
   visible?: boolean;
   height: number;
+  layout?: "drawer" | "panel";
   terminalIds: string[];
   activeTerminalId: string;
   terminalGroups: ThreadTerminalGroup[];
@@ -779,6 +781,7 @@ export default function ThreadTerminalDrawer({
   runtimeEnv,
   visible = true,
   height,
+  layout = "drawer",
   terminalIds,
   activeTerminalId,
   terminalGroups,
@@ -794,6 +797,7 @@ export default function ThreadTerminalDrawer({
   onHeightChange,
   onAddTerminalContext,
 }: ThreadTerminalDrawerProps) {
+  const panelLayout = layout === "panel";
   const [drawerHeight, setDrawerHeight] = useState(() => clampDrawerHeight(height));
   const [resizeEpoch, setResizeEpoch] = useState(0);
   const drawerHeightRef = useRef(drawerHeight);
@@ -992,6 +996,9 @@ export default function ThreadTerminalDrawer({
   );
 
   useEffect(() => {
+    if (panelLayout) {
+      return;
+    }
     if (!visible) {
       return;
     }
@@ -1012,7 +1019,7 @@ export default function ThreadTerminalDrawer({
     return () => {
       window.removeEventListener("resize", onWindowResize);
     };
-  }, [syncHeight, visible]);
+  }, [panelLayout, syncHeight, visible]);
 
   useEffect(() => {
     if (!visible) {
@@ -1029,16 +1036,21 @@ export default function ThreadTerminalDrawer({
 
   return (
     <aside
-      className="thread-terminal-drawer relative flex min-w-0 shrink-0 flex-col overflow-hidden border-t border-border/80 bg-background"
-      style={{ height: `${drawerHeight}px` }}
+      className={cn(
+        "thread-terminal-drawer relative flex min-w-0 shrink-0 flex-col overflow-hidden bg-background",
+        panelLayout ? "h-full border border-border/80" : "border-t border-border/80",
+      )}
+      style={panelLayout ? undefined : { height: `${drawerHeight}px` }}
     >
-      <div
-        className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize"
-        onPointerDown={handleResizePointerDown}
-        onPointerMove={handleResizePointerMove}
-        onPointerUp={handleResizePointerEnd}
-        onPointerCancel={handleResizePointerEnd}
-      />
+      {!panelLayout ? (
+        <div
+          className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize"
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={handleResizePointerEnd}
+          onPointerCancel={handleResizePointerEnd}
+        />
+      ) : null}
 
       {!hasTerminalSidebar && (
         <div className="pointer-events-none absolute right-2 top-2 z-20">

@@ -23,7 +23,7 @@ function ChatIndexRouteView() {
 
       <div className="flex flex-1 items-center justify-center">
         <div className="text-center">
-          <p className="text-sm">Select a thread or create a new one to get started.</p>
+          <p className="text-sm">Select a terminal thread or create a new one to get started.</p>
         </div>
       </div>
     </div>

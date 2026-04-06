@@ -9,12 +9,13 @@ import { useThreadSelectionStore } from "../threadSelectionStore";
 import { resolveSidebarNewThreadEnvMode } from "~/components/Sidebar.logic";
 import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
+import { useNewThreadDialogStore } from "../newThreadDialogStore";
+import { NewThreadProviderDialog } from "../components/NewThreadProviderDialog";
 
 function ChatRouteGlobalShortcuts() {
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
   const selectedThreadIdsSize = useThreadSelectionStore((state) => state.selectedThreadIds.size);
-  const { activeDraftThread, activeThread, defaultProjectId, handleNewThread, routeThreadId } =
-    useHandleNewThread();
+  const { activeDraftThread, activeThread, defaultProjectId, routeThreadId } = useHandleNewThread();
   const keybindings = useServerKeybindings();
   const terminalOpen = useTerminalStateStore((state) =>
     routeThreadId
@@ -22,6 +23,7 @@ function ChatRouteGlobalShortcuts() {
       : false,
   );
   const appSettings = useSettings();
+  const openNewThreadDialog = useNewThreadDialogStore((state) => state.openDialog);
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -46,7 +48,8 @@ function ChatRouteGlobalShortcuts() {
       if (command === "chat.newLocal") {
         event.preventDefault();
         event.stopPropagation();
-        void handleNewThread(projectId, {
+        openNewThreadDialog({
+          projectId,
           envMode: resolveSidebarNewThreadEnvMode({
             defaultEnvMode: appSettings.defaultThreadEnvMode,
           }),
@@ -57,7 +60,8 @@ function ChatRouteGlobalShortcuts() {
       if (command === "chat.new") {
         event.preventDefault();
         event.stopPropagation();
-        void handleNewThread(projectId, {
+        openNewThreadDialog({
+          projectId,
           branch: activeThread?.branch ?? activeDraftThread?.branch ?? null,
           worktreePath: activeThread?.worktreePath ?? activeDraftThread?.worktreePath ?? null,
           envMode:
@@ -75,9 +79,9 @@ function ChatRouteGlobalShortcuts() {
     activeDraftThread,
     activeThread,
     clearSelection,
-    handleNewThread,
     keybindings,
     defaultProjectId,
+    openNewThreadDialog,
     selectedThreadIdsSize,
     terminalOpen,
     appSettings.defaultThreadEnvMode,
@@ -90,6 +94,7 @@ function ChatRouteLayout() {
   return (
     <>
       <ChatRouteGlobalShortcuts />
+      <NewThreadProviderDialog />
       <Outlet />
     </>
   );

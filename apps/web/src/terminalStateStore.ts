@@ -32,6 +32,10 @@ export interface ThreadTerminalLaunchContext {
   worktreePath: string | null;
 }
 
+export interface ThreadTerminalStartupRequest {
+  command: string;
+}
+
 export interface TerminalEventEntry {
   id: number;
   event: TerminalEvent;
@@ -539,6 +543,7 @@ export function selectTerminalEventEntries(
 interface TerminalStateStoreState {
   terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
   terminalLaunchContextByThreadId: Record<ThreadId, ThreadTerminalLaunchContext>;
+  terminalStartupRequestByThreadId: Record<ThreadId, ThreadTerminalStartupRequest>;
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>;
   nextTerminalEventId: number;
   setTerminalOpen: (threadId: ThreadId, open: boolean) => void;
@@ -554,6 +559,8 @@ interface TerminalStateStoreState {
   closeTerminal: (threadId: ThreadId, terminalId: string) => void;
   setTerminalLaunchContext: (threadId: ThreadId, context: ThreadTerminalLaunchContext) => void;
   clearTerminalLaunchContext: (threadId: ThreadId) => void;
+  setTerminalStartupRequest: (threadId: ThreadId, request: ThreadTerminalStartupRequest) => void;
+  clearTerminalStartupRequest: (threadId: ThreadId) => void;
   setTerminalActivity: (
     threadId: ThreadId,
     terminalId: string,
@@ -591,6 +598,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
       return {
         terminalStateByThreadId: {},
         terminalLaunchContextByThreadId: {},
+        terminalStartupRequestByThreadId: {},
         terminalEventEntriesByKey: {},
         nextTerminalEventId: 1,
         setTerminalOpen: (threadId, open) =>
@@ -640,6 +648,21 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             }
             const { [threadId]: _removed, ...rest } = state.terminalLaunchContextByThreadId;
             return { terminalLaunchContextByThreadId: rest };
+          }),
+        setTerminalStartupRequest: (threadId, request) =>
+          set((state) => ({
+            terminalStartupRequestByThreadId: {
+              ...state.terminalStartupRequestByThreadId,
+              [threadId]: request,
+            },
+          })),
+        clearTerminalStartupRequest: (threadId) =>
+          set((state) => {
+            if (!state.terminalStartupRequestByThreadId[threadId]) {
+              return state;
+            }
+            const { [threadId]: _removed, ...rest } = state.terminalStartupRequestByThreadId;
+            return { terminalStartupRequestByThreadId: rest };
           }),
         setTerminalActivity: (threadId, terminalId, hasRunningSubprocess) =>
           updateTerminal(threadId, (state) =>
@@ -709,8 +732,12 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               () => createDefaultThreadTerminalState(),
             );
             const hadLaunchContext = state.terminalLaunchContextByThreadId[threadId] !== undefined;
+            const hadStartupRequest =
+              state.terminalStartupRequestByThreadId[threadId] !== undefined;
             const { [threadId]: _removed, ...remainingLaunchContexts } =
               state.terminalLaunchContextByThreadId;
+            const { [threadId]: _removedStartupRequest, ...remainingStartupRequests } =
+              state.terminalStartupRequestByThreadId;
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
             let removedEventEntries = false;
             for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
@@ -722,6 +749,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             if (
               nextTerminalStateByThreadId === state.terminalStateByThreadId &&
               !hadLaunchContext &&
+              !hadStartupRequest &&
               !removedEventEntries
             ) {
               return state;
@@ -729,6 +757,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             return {
               terminalStateByThreadId: nextTerminalStateByThreadId,
               terminalLaunchContextByThreadId: remainingLaunchContexts,
+              terminalStartupRequestByThreadId: remainingStartupRequests,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
             };
           }),
@@ -736,6 +765,8 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
           set((state) => {
             const hadTerminalState = state.terminalStateByThreadId[threadId] !== undefined;
             const hadLaunchContext = state.terminalLaunchContextByThreadId[threadId] !== undefined;
+            const hadStartupRequest =
+              state.terminalStartupRequestByThreadId[threadId] !== undefined;
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
             let removedEventEntries = false;
             for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
@@ -744,16 +775,24 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
                 removedEventEntries = true;
               }
             }
-            if (!hadTerminalState && !hadLaunchContext && !removedEventEntries) {
+            if (
+              !hadTerminalState &&
+              !hadLaunchContext &&
+              !hadStartupRequest &&
+              !removedEventEntries
+            ) {
               return state;
             }
             const nextTerminalStateByThreadId = { ...state.terminalStateByThreadId };
             delete nextTerminalStateByThreadId[threadId];
             const nextLaunchContexts = { ...state.terminalLaunchContextByThreadId };
             delete nextLaunchContexts[threadId];
+            const nextStartupRequests = { ...state.terminalStartupRequestByThreadId };
+            delete nextStartupRequests[threadId];
             return {
               terminalStateByThreadId: nextTerminalStateByThreadId,
               terminalLaunchContextByThreadId: nextLaunchContexts,
+              terminalStartupRequestByThreadId: nextStartupRequests,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
             };
           }),
@@ -764,6 +803,9 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             );
             const orphanedLaunchContextIds = Object.keys(
               state.terminalLaunchContextByThreadId,
+            ).filter((id) => !activeThreadIds.has(id as ThreadId));
+            const orphanedStartupRequestIds = Object.keys(
+              state.terminalStartupRequestByThreadId,
             ).filter((id) => !activeThreadIds.has(id as ThreadId));
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
             let removedEventEntries = false;
@@ -777,6 +819,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             if (
               orphanedIds.length === 0 &&
               orphanedLaunchContextIds.length === 0 &&
+              orphanedStartupRequestIds.length === 0 &&
               !removedEventEntries
             ) {
               return state;
@@ -789,9 +832,14 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             for (const id of orphanedLaunchContextIds) {
               delete nextLaunchContexts[id as ThreadId];
             }
+            const nextStartupRequests = { ...state.terminalStartupRequestByThreadId };
+            for (const id of orphanedStartupRequestIds) {
+              delete nextStartupRequests[id as ThreadId];
+            }
             return {
               terminalStateByThreadId: next,
               terminalLaunchContextByThreadId: nextLaunchContexts,
+              terminalStartupRequestByThreadId: nextStartupRequests,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
             };
           }),

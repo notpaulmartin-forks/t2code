@@ -74,6 +74,7 @@ import { gitStatusQueryOptions } from "../lib/gitReactQuery";
 import { readNativeApi } from "../nativeApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useNewThreadDialogStore } from "../newThreadDialogStore";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import { toastManager } from "./ui/toast";
@@ -693,6 +694,7 @@ export default function Sidebar() {
   const appSettings = useSettings();
   const { updateSettings } = useUpdateSettings();
   const { activeDraftThread, activeThread, handleNewThread } = useHandleNewThread();
+  const openNewThreadDialog = useNewThreadDialogStore((state) => state.openDialog);
   const { archiveThread, deleteThread } = useThreadActions();
   const routeThreadId = useParams({
     strict: false,
@@ -1680,7 +1682,8 @@ export default function Sidebar() {
                             }
                           : null,
                     });
-                    void handleNewThread(project.id, {
+                    openNewThreadDialog({
+                      projectId: project.id,
                       ...(seedContext.branch !== undefined ? { branch: seedContext.branch } : {}),
                       ...(seedContext.worktreePath !== undefined
                         ? { worktreePath: seedContext.worktreePath }

@@ -40,8 +40,9 @@ export function useHandleNewThread() {
         branch?: string | null;
         worktreePath?: string | null;
         envMode?: DraftThreadEnvMode;
+        reuseExistingDraft?: boolean;
       },
-    ): Promise<void> => {
+    ): Promise<ThreadId> => {
       const {
         clearProjectDraftThreadId,
         getDraftThread,
@@ -53,11 +54,12 @@ export function useHandleNewThread() {
       const hasBranchOption = options?.branch !== undefined;
       const hasWorktreePathOption = options?.worktreePath !== undefined;
       const hasEnvModeOption = options?.envMode !== undefined;
+      const shouldReuseExistingDraft = options?.reuseExistingDraft ?? true;
       const storedDraftThread = getDraftThreadByProjectId(projectId);
       const latestActiveDraftThread: DraftThreadState | null = routeThreadId
         ? getDraftThread(routeThreadId)
         : null;
-      if (storedDraftThread) {
+      if (shouldReuseExistingDraft && storedDraftThread) {
         return (async () => {
           if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
             setDraftThreadContext(storedDraftThread.threadId, {
@@ -68,18 +70,20 @@ export function useHandleNewThread() {
           }
           setProjectDraftThreadId(projectId, storedDraftThread.threadId);
           if (routeThreadId === storedDraftThread.threadId) {
-            return;
+            return storedDraftThread.threadId;
           }
           await navigate({
             to: "/$threadId",
             params: { threadId: storedDraftThread.threadId },
           });
+          return storedDraftThread.threadId;
         })();
       }
 
       clearProjectDraftThreadId(projectId);
 
       if (
+        shouldReuseExistingDraft &&
         latestActiveDraftThread &&
         routeThreadId &&
         latestActiveDraftThread.projectId === projectId
@@ -92,7 +96,7 @@ export function useHandleNewThread() {
           });
         }
         setProjectDraftThreadId(projectId, routeThreadId);
-        return Promise.resolve();
+        return Promise.resolve(routeThreadId);
       }
 
       const threadId = newThreadId();
@@ -111,6 +115,7 @@ export function useHandleNewThread() {
           to: "/$threadId",
           params: { threadId },
         });
+        return threadId;
       })();
     },
     [navigate, routeThreadId],

@@ -47,7 +47,7 @@ export function createWsRpcProtocolLayer(url?: string) {
         "error",
         () => {
           clearAllTrackedRpcRequests();
-          recordWsConnectionErrored("Unable to connect to the T3 server WebSocket.");
+          recordWsConnectionErrored("Unable to connect to the T2 Code server WebSocket.");
         },
         { once: true },
       );

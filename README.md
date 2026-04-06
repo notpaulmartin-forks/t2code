@@ -1,11 +1,11 @@
-# T3 Code
+# T2 Code
 
-T3 Code is a minimal web GUI for coding agents (currently Codex and Claude, more coming soon).
+T2 Code is a minimal web GUI for coding agents (currently Codex and Claude, more coming soon).
 
 ## Installation
 
 > [!WARNING]
-> T3 Code currently supports Codex and Claude.
+> T2 Code currently supports Codex and Claude.
 > Install and authenticate at least one provider before use:
 >
 > - Codex: install [Codex CLI](https://github.com/openai/codex) and run `codex login`

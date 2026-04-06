@@ -58,6 +58,8 @@ describe("terminalStateStore actions", () => {
     useTerminalStateStore.setState({
       terminalStateByThreadId: {},
       terminalLaunchContextByThreadId: {},
+      terminalStartupRequestByThreadId: {},
+      terminalResumeBindingByThreadId: {},
       terminalEventEntriesByKey: {},
       nextTerminalEventId: 1,
     });
@@ -319,6 +321,10 @@ describe("terminalStateStore actions", () => {
   it("clears buffered terminal events when a thread terminal state is removed", () => {
     const store = useTerminalStateStore.getState();
     store.recordTerminalEvent(makeTerminalEvent("output"));
+    store.setTerminalResumeBinding(THREAD_ID, {
+      provider: "codex",
+      sessionId: "session-1",
+    });
     store.removeTerminalState(THREAD_ID);
 
     const entries = selectTerminalEventEntries(
@@ -328,6 +334,7 @@ describe("terminalStateStore actions", () => {
     );
 
     expect(entries).toEqual([]);
+    expect(useTerminalStateStore.getState().terminalResumeBindingByThreadId[THREAD_ID]).toBeFalsy();
   });
 
   it("is a no-op when clearing terminal state for a thread with no state or buffered events", () => {
@@ -337,5 +344,20 @@ describe("terminalStateStore actions", () => {
     store.clearTerminalState(THREAD_ID);
 
     expect(useTerminalStateStore.getState()).toBe(before);
+  });
+
+  it("keeps resume bindings when clearing terminal UI state", () => {
+    const store = useTerminalStateStore.getState();
+    store.setTerminalResumeBinding(THREAD_ID, {
+      provider: "claudeAgent",
+      sessionId: "session-1",
+    });
+
+    store.clearTerminalState(THREAD_ID);
+
+    expect(useTerminalStateStore.getState().terminalResumeBindingByThreadId[THREAD_ID]).toEqual({
+      provider: "claudeAgent",
+      sessionId: "session-1",
+    });
   });
 });

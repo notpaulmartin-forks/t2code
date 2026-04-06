@@ -63,6 +63,9 @@ import {
 import {
   ServerConfigStreamEvent,
   ServerConfig,
+  ServerResolveProviderSessionError,
+  ServerResolveProviderSessionInput,
+  ServerResolveProviderSessionResult,
   ServerLifecycleStreamEvent,
   ServerProviderUpdatedPayload,
   ServerUpsertKeybindingInput,
@@ -108,6 +111,7 @@ export const WS_METHODS = {
   serverUpsertKeybinding: "server.upsertKeybinding",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
+  serverResolveProviderSession: "server.resolveProviderSession",
 
   // Streaming subscriptions
   subscribeOrchestrationDomainEvents: "subscribeOrchestrationDomainEvents",
@@ -143,6 +147,12 @@ export const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSetting
   payload: Schema.Struct({ patch: ServerSettingsPatch }),
   success: ServerSettings,
   error: ServerSettingsError,
+});
+
+export const WsServerResolveProviderSessionRpc = Rpc.make(WS_METHODS.serverResolveProviderSession, {
+  payload: ServerResolveProviderSessionInput,
+  success: ServerResolveProviderSessionResult,
+  error: ServerResolveProviderSessionError,
 });
 
 export const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntries, {
@@ -327,6 +337,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpsertKeybindingRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
+  WsServerResolveProviderSessionRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,

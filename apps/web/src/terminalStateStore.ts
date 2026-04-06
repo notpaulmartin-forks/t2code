@@ -5,7 +5,7 @@
  * API constrained to store actions/selectors.
  */
 
-import { ThreadId, type TerminalEvent } from "@t3tools/contracts";
+import { ThreadId, type ProviderKind, type TerminalEvent } from "@t3tools/contracts";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { resolveStorage } from "./lib/storage";
@@ -33,7 +33,15 @@ export interface ThreadTerminalLaunchContext {
 }
 
 export interface ThreadTerminalStartupRequest {
+  provider: ProviderKind;
+  startedAt: string;
   command: string;
+  sessionId?: string;
+}
+
+export interface ThreadTerminalResumeBinding {
+  provider: ProviderKind;
+  sessionId: string;
 }
 
 export interface TerminalEventEntry {
@@ -544,6 +552,7 @@ interface TerminalStateStoreState {
   terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
   terminalLaunchContextByThreadId: Record<ThreadId, ThreadTerminalLaunchContext>;
   terminalStartupRequestByThreadId: Record<ThreadId, ThreadTerminalStartupRequest>;
+  terminalResumeBindingByThreadId: Record<ThreadId, ThreadTerminalResumeBinding>;
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>;
   nextTerminalEventId: number;
   setTerminalOpen: (threadId: ThreadId, open: boolean) => void;
@@ -561,6 +570,8 @@ interface TerminalStateStoreState {
   clearTerminalLaunchContext: (threadId: ThreadId) => void;
   setTerminalStartupRequest: (threadId: ThreadId, request: ThreadTerminalStartupRequest) => void;
   clearTerminalStartupRequest: (threadId: ThreadId) => void;
+  setTerminalResumeBinding: (threadId: ThreadId, binding: ThreadTerminalResumeBinding) => void;
+  clearTerminalResumeBinding: (threadId: ThreadId) => void;
   setTerminalActivity: (
     threadId: ThreadId,
     terminalId: string,
@@ -599,6 +610,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         terminalStateByThreadId: {},
         terminalLaunchContextByThreadId: {},
         terminalStartupRequestByThreadId: {},
+        terminalResumeBindingByThreadId: {},
         terminalEventEntriesByKey: {},
         nextTerminalEventId: 1,
         setTerminalOpen: (threadId, open) =>
@@ -663,6 +675,21 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             }
             const { [threadId]: _removed, ...rest } = state.terminalStartupRequestByThreadId;
             return { terminalStartupRequestByThreadId: rest };
+          }),
+        setTerminalResumeBinding: (threadId, binding) =>
+          set((state) => ({
+            terminalResumeBindingByThreadId: {
+              ...state.terminalResumeBindingByThreadId,
+              [threadId]: binding,
+            },
+          })),
+        clearTerminalResumeBinding: (threadId) =>
+          set((state) => {
+            if (!state.terminalResumeBindingByThreadId[threadId]) {
+              return state;
+            }
+            const { [threadId]: _removed, ...rest } = state.terminalResumeBindingByThreadId;
+            return { terminalResumeBindingByThreadId: rest };
           }),
         setTerminalActivity: (threadId, terminalId, hasRunningSubprocess) =>
           updateTerminal(threadId, (state) =>
@@ -767,6 +794,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             const hadLaunchContext = state.terminalLaunchContextByThreadId[threadId] !== undefined;
             const hadStartupRequest =
               state.terminalStartupRequestByThreadId[threadId] !== undefined;
+            const hadResumeBinding = state.terminalResumeBindingByThreadId[threadId] !== undefined;
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
             let removedEventEntries = false;
             for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
@@ -779,6 +807,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               !hadTerminalState &&
               !hadLaunchContext &&
               !hadStartupRequest &&
+              !hadResumeBinding &&
               !removedEventEntries
             ) {
               return state;
@@ -789,10 +818,13 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             delete nextLaunchContexts[threadId];
             const nextStartupRequests = { ...state.terminalStartupRequestByThreadId };
             delete nextStartupRequests[threadId];
+            const nextResumeBindings = { ...state.terminalResumeBindingByThreadId };
+            delete nextResumeBindings[threadId];
             return {
               terminalStateByThreadId: nextTerminalStateByThreadId,
               terminalLaunchContextByThreadId: nextLaunchContexts,
               terminalStartupRequestByThreadId: nextStartupRequests,
+              terminalResumeBindingByThreadId: nextResumeBindings,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
             };
           }),
@@ -807,6 +839,9 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             const orphanedStartupRequestIds = Object.keys(
               state.terminalStartupRequestByThreadId,
             ).filter((id) => !activeThreadIds.has(id as ThreadId));
+            const orphanedResumeBindingIds = Object.keys(
+              state.terminalResumeBindingByThreadId,
+            ).filter((id) => !activeThreadIds.has(id as ThreadId));
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
             let removedEventEntries = false;
             for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
@@ -820,6 +855,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               orphanedIds.length === 0 &&
               orphanedLaunchContextIds.length === 0 &&
               orphanedStartupRequestIds.length === 0 &&
+              orphanedResumeBindingIds.length === 0 &&
               !removedEventEntries
             ) {
               return state;
@@ -836,10 +872,15 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             for (const id of orphanedStartupRequestIds) {
               delete nextStartupRequests[id as ThreadId];
             }
+            const nextResumeBindings = { ...state.terminalResumeBindingByThreadId };
+            for (const id of orphanedResumeBindingIds) {
+              delete nextResumeBindings[id as ThreadId];
+            }
             return {
               terminalStateByThreadId: next,
               terminalLaunchContextByThreadId: nextLaunchContexts,
               terminalStartupRequestByThreadId: nextStartupRequests,
+              terminalResumeBindingByThreadId: nextResumeBindings,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
             };
           }),
@@ -851,6 +892,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
       storage: createJSONStorage(createTerminalStateStorage),
       partialize: (state) => ({
         terminalStateByThreadId: state.terminalStateByThreadId,
+        terminalResumeBindingByThreadId: state.terminalResumeBindingByThreadId,
       }),
     },
   ),

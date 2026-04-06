@@ -204,3 +204,23 @@ export const ServerProviderUpdatedPayload = Schema.Struct({
   providers: ServerProviders,
 });
 export type ServerProviderUpdatedPayload = typeof ServerProviderUpdatedPayload.Type;
+
+export const ServerResolveProviderSessionInput = Schema.Struct({
+  provider: ProviderKind,
+  cwd: TrimmedNonEmptyString,
+  startedAt: IsoDateTime,
+  codexHomePath: Schema.optional(TrimmedNonEmptyString),
+});
+export type ServerResolveProviderSessionInput = typeof ServerResolveProviderSessionInput.Type;
+
+export const ServerResolveProviderSessionResult = Schema.Struct({
+  sessionId: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type ServerResolveProviderSessionResult = typeof ServerResolveProviderSessionResult.Type;
+
+export class ServerResolveProviderSessionError extends Schema.TaggedErrorClass<ServerResolveProviderSessionError>()(
+  "ServerResolveProviderSessionError",
+  {
+    message: TrimmedNonEmptyString,
+  },
+) {}

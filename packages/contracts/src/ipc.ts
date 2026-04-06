@@ -24,6 +24,8 @@ import type {
 } from "./project";
 import type {
   ServerConfig,
+  ServerResolveProviderSessionInput,
+  ServerResolveProviderSessionResult,
   ServerProviderUpdatedPayload,
   ServerUpsertKeybindingResult,
 } from "./server";
@@ -171,6 +173,9 @@ export interface NativeApi {
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
+    resolveProviderSession: (
+      input: ServerResolveProviderSessionInput,
+    ) => Promise<ServerResolveProviderSessionResult>;
   };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;

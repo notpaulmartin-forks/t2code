@@ -30,7 +30,10 @@ import { newCommandId } from "../lib/utils";
 import { useTerminalStateStore } from "../terminalStateStore";
 import { toastManager } from "./ui/toast";
 import { cn } from "../lib/utils";
-import { type UnifiedSettings } from "@t3tools/contracts/settings";
+import {
+  buildDefaultThreadTitle,
+  buildProviderLaunchCommand,
+} from "../lib/providerTerminalCommands";
 
 const PROVIDER_OPTIONS: ReadonlyArray<{
   provider: ProviderKind;
@@ -52,26 +55,9 @@ const PROVIDER_OPTIONS: ReadonlyArray<{
   },
 ];
 
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-
-function buildProviderCommand(provider: ProviderKind, settings: UnifiedSettings): string {
-  if (provider === "codex") {
-    const binaryPath = settings.providers.codex.binaryPath || "codex";
-    const homePath = settings.providers.codex.homePath.trim();
-    if (homePath.length > 0) {
-      return `CODEX_HOME=${shellQuote(homePath)} ${shellQuote(binaryPath)}`;
-    }
-    return shellQuote(binaryPath);
-  }
-
-  return shellQuote(settings.providers.claudeAgent.binaryPath || "claude");
-}
-
 function resolveThreadModelSelection(
   provider: ProviderKind,
-  settings: UnifiedSettings,
+  settings: ReturnType<typeof useSettings>,
   serverProviders: ReadonlyArray<ServerProvider>,
 ): ModelSelection {
   const selectedModel =
@@ -99,13 +85,9 @@ function resolveThreadModelSelection(
   };
 }
 
-function buildThreadTitle(provider: ProviderKind): string {
-  return provider === "codex" ? "Codex thread" : "Claude Code thread";
-}
-
 function providerDisabledReason(
   provider: ProviderKind,
-  settings: UnifiedSettings,
+  settings: ReturnType<typeof useSettings>,
   serverProviders: ReadonlyArray<ServerProvider>,
 ): string | null {
   const providerSettings = settings.providers[provider];
@@ -191,12 +173,22 @@ export function NewThreadProviderDialog() {
           ...(request.envMode !== undefined ? { envMode: request.envMode } : {}),
           reuseExistingDraft: false,
         });
+        const threadTitle = buildDefaultThreadTitle(provider);
+        const startedAt = new Date().toISOString();
 
         setModelSelection(threadId, modelSelection);
         setStickyModelSelection(modelSelection);
         ensureTerminal(threadId, DEFAULT_THREAD_TERMINAL_ID, { active: true, open: true });
         setTerminalStartupRequest(threadId, {
-          command: buildProviderCommand(provider, settings),
+          provider,
+          startedAt,
+          ...(provider === "claudeAgent" ? { sessionId: threadId } : {}),
+          command: buildProviderLaunchCommand({
+            provider,
+            settings,
+            sessionId: provider === "claudeAgent" ? threadId : null,
+            title: threadTitle,
+          }),
         });
 
         await api.orchestration.dispatchCommand({
@@ -204,7 +196,7 @@ export function NewThreadProviderDialog() {
           commandId: newCommandId(),
           threadId,
           projectId: request.projectId,
-          title: buildThreadTitle(provider),
+          title: threadTitle,
           modelSelection,
           runtimeMode: "full-access",
           interactionMode: "default",

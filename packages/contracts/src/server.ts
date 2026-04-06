@@ -210,6 +210,7 @@ export const ServerResolveProviderSessionInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   startedAt: IsoDateTime,
   codexHomePath: Schema.optional(TrimmedNonEmptyString),
+  excludeSessionId: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerResolveProviderSessionInput = typeof ServerResolveProviderSessionInput.Type;
 

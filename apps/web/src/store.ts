@@ -155,9 +155,12 @@ function mapTurnDiffSummary(
 }
 
 function mapThread(thread: OrchestrationThread): Thread {
+  const codexThreadId =
+    thread.modelSelection.provider === "codex" ? (thread.session?.providerThreadId ?? null) : null;
+
   return {
     id: thread.id,
-    codexThreadId: null,
+    codexThreadId,
     projectId: thread.projectId,
     title: thread.title,
     modelSelection: normalizeModelSelection(thread.modelSelection),

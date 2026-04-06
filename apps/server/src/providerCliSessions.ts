@@ -15,6 +15,8 @@ interface CodexSessionMeta {
 }
 
 const CODEX_SESSION_GRACE_MS = 15_000;
+const FIRST_LINE_READ_CHUNK_BYTES = 8_192;
+const MAX_FIRST_LINE_BYTES = 512 * 1_024;
 
 function normalizeDirectory(value: string): string {
   return path.resolve(value);
@@ -23,14 +25,32 @@ function normalizeDirectory(value: string): string {
 async function readFirstLine(filePath: string): Promise<string | null> {
   const handle = await fs.open(filePath, "r");
   try {
-    const buffer = Buffer.alloc(4_096);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    if (bytesRead <= 0) {
+    const chunks: Buffer[] = [];
+    let bytesConsumed = 0;
+
+    while (bytesConsumed < MAX_FIRST_LINE_BYTES) {
+      const buffer = Buffer.alloc(FIRST_LINE_READ_CHUNK_BYTES);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, bytesConsumed);
+      if (bytesRead <= 0) {
+        break;
+      }
+
+      const chunk = buffer.subarray(0, bytesRead);
+      chunks.push(chunk);
+      bytesConsumed += bytesRead;
+
+      if (chunk.includes(0x0a)) {
+        break;
+      }
+    }
+
+    if (chunks.length === 0) {
       return null;
     }
-    const chunk = buffer.toString("utf8", 0, bytesRead);
-    const newlineIndex = chunk.indexOf("\n");
-    return newlineIndex >= 0 ? chunk.slice(0, newlineIndex) : chunk;
+
+    const firstLineChunk = Buffer.concat(chunks).toString("utf8");
+    const newlineIndex = firstLineChunk.indexOf("\n");
+    return newlineIndex >= 0 ? firstLineChunk.slice(0, newlineIndex) : firstLineChunk;
   } finally {
     await handle.close();
   }
@@ -104,6 +124,7 @@ async function resolveCodexSessionId(input: {
   cwd: string;
   startedAt: string;
   codexHomePath?: string;
+  excludeSessionId?: string;
 }): Promise<string | null> {
   const codexHomePath =
     input.codexHomePath?.trim() || process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
@@ -126,29 +147,30 @@ async function resolveCodexSessionId(input: {
   const lowerBoundMs = Number.isFinite(startedAtMs) ? startedAtMs - CODEX_SESSION_GRACE_MS : 0;
   const matches: Array<{ id: string; timestampMs: number }> = [];
 
-  await Promise.all(
-    sessionFiles.map(async (filePath) => {
-      const firstLine = await readFirstLine(filePath).catch(() => null);
-      const sessionMeta = parseCodexSessionMeta(firstLine);
-      if (!sessionMeta) {
-        return;
-      }
-      if (normalizeDirectory(sessionMeta.cwd) !== normalizedCwd) {
-        return;
-      }
-      const timestampMs = Date.parse(sessionMeta.timestamp);
-      if (!Number.isFinite(timestampMs) || timestampMs < lowerBoundMs) {
-        return;
-      }
-      matches.push({
-        id: sessionMeta.id,
-        timestampMs,
-      });
-    }),
-  );
+  for (const filePath of sessionFiles) {
+    const firstLine = await readFirstLine(filePath).catch(() => null);
+    const sessionMeta = parseCodexSessionMeta(firstLine);
+    if (!sessionMeta) {
+      continue;
+    }
+    if (input.excludeSessionId && sessionMeta.id === input.excludeSessionId) {
+      continue;
+    }
+    if (normalizeDirectory(sessionMeta.cwd) !== normalizedCwd) {
+      continue;
+    }
+    const timestampMs = Date.parse(sessionMeta.timestamp);
+    if (!Number.isFinite(timestampMs) || timestampMs < lowerBoundMs) {
+      continue;
+    }
+    matches.push({
+      id: sessionMeta.id,
+      timestampMs,
+    });
+  }
 
   matches.sort((left, right) => left.timestampMs - right.timestampMs);
-  return matches[0]?.id ?? null;
+  return matches.at(-1)?.id ?? null;
 }
 
 export async function resolveProviderSession(
@@ -164,6 +186,7 @@ export async function resolveProviderSession(
         cwd: input.cwd,
         startedAt: input.startedAt,
         ...(input.codexHomePath ? { codexHomePath: input.codexHomePath } : {}),
+        ...(input.excludeSessionId ? { excludeSessionId: input.excludeSessionId } : {}),
       }),
     };
   } catch (error) {

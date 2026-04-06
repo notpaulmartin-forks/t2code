@@ -484,6 +484,8 @@ it.effect("decodes orchestration session runtime mode defaults", () =>
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
     assert.strictEqual(parsed.runtimeMode, DEFAULT_RUNTIME_MODE);
+    assert.strictEqual(parsed.providerSessionId, null);
+    assert.strictEqual(parsed.providerThreadId, null);
   }),
 );
 

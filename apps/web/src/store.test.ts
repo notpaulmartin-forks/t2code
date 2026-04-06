@@ -206,6 +206,8 @@ describe("store read model sync", () => {
           threadId: ThreadId.makeUnsafe("thread-1"),
           status: "ready",
           providerName: "claudeAgent",
+          providerSessionId: null,
+          providerThreadId: null,
           runtimeMode: "approval-required",
           activeTurnId: null,
           lastError: null,
@@ -246,6 +248,30 @@ describe("store read model sync", () => {
     );
 
     expect(next.threads[0]?.archivedAt).toBe(archivedAt);
+  });
+
+  it("maps persisted Codex provider thread ids onto threads", () => {
+    const initialState = makeState(makeThread());
+    const next = syncServerReadModel(
+      initialState,
+      makeReadModel(
+        makeReadModelThread({
+          session: {
+            threadId: ThreadId.makeUnsafe("thread-1"),
+            status: "ready",
+            providerName: "codex",
+            providerSessionId: null,
+            providerThreadId: "provider-thread-1",
+            runtimeMode: "approval-required",
+            activeTurnId: null,
+            lastError: null,
+            updatedAt: "2026-02-27T00:00:00.000Z",
+          },
+        }),
+      ),
+    );
+
+    expect(next.threads[0]?.codexThreadId).toBe("provider-thread-1");
   });
 
   it("replaces projects using snapshot order during recovery", () => {
@@ -521,6 +547,8 @@ describe("incremental orchestration updates", () => {
             threadId: thread.id,
             status: "running",
             providerName: "codex",
+            providerSessionId: null,
+            providerThreadId: null,
             runtimeMode: "full-access",
             activeTurnId: TurnId.makeUnsafe("turn-1"),
             lastError: null,
@@ -799,6 +827,8 @@ describe("incremental orchestration updates", () => {
           threadId: thread.id,
           status: "running",
           providerName: "codex",
+          providerSessionId: null,
+          providerThreadId: null,
           runtimeMode: "full-access",
           activeTurnId: TurnId.makeUnsafe("turn-3"),
           lastError: null,

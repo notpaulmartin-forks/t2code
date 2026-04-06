@@ -1782,6 +1782,8 @@ it.effect("restores pending turn-start metadata across projection pipeline resta
             threadId,
             status: "running",
             providerName: "codex",
+            providerSessionId: null,
+            providerThreadId: null,
             runtimeMode: "approval-required",
             activeTurnId: turnId,
             lastError: null,

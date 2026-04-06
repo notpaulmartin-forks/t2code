@@ -263,6 +263,8 @@ describe("ProviderRuntimeIngestion", () => {
           threadId: ThreadId.makeUnsafe("thread-1"),
           status: "ready",
           providerName: "codex",
+          providerSessionId: null,
+          providerThreadId: null,
           runtimeMode: "approval-required",
           activeTurnId: null,
           updatedAt: createdAt,
@@ -444,6 +446,9 @@ describe("ProviderRuntimeIngestion", () => {
       provider: "codex",
       createdAt: new Date().toISOString(),
       threadId: asThreadId("thread-1"),
+      payload: {
+        providerThreadId: "provider-thread-midturn",
+      },
     });
     harness.emit({
       type: "session.started",
@@ -460,6 +465,7 @@ describe("ProviderRuntimeIngestion", () => {
     );
     expect(midThread?.session?.status).toBe("running");
     expect(midThread?.session?.activeTurnId).toBe("turn-midturn-lifecycle");
+    expect(midThread?.session?.providerThreadId).toBe("provider-thread-midturn");
 
     harness.emit({
       type: "turn.completed",
@@ -490,6 +496,8 @@ describe("ProviderRuntimeIngestion", () => {
           threadId: ThreadId.makeUnsafe("thread-1"),
           status: "ready",
           providerName: "claudeAgent",
+          providerSessionId: null,
+          providerThreadId: null,
           runtimeMode: "approval-required",
           activeTurnId: null,
           updatedAt: seededAt,
@@ -792,6 +800,8 @@ describe("ProviderRuntimeIngestion", () => {
           threadId: sourceThreadId,
           status: "ready",
           providerName: "codex",
+          providerSessionId: null,
+          providerThreadId: null,
           runtimeMode: "approval-required",
           activeTurnId: null,
           updatedAt: createdAt,
@@ -827,6 +837,8 @@ describe("ProviderRuntimeIngestion", () => {
           threadId: targetThreadId,
           status: "ready",
           providerName: "codex",
+          providerSessionId: null,
+          providerThreadId: null,
           runtimeMode: "approval-required",
           activeTurnId: null,
           updatedAt: createdAt,
@@ -979,6 +991,8 @@ describe("ProviderRuntimeIngestion", () => {
           threadId: sourceThreadId,
           status: "ready",
           providerName: "codex",
+          providerSessionId: null,
+          providerThreadId: null,
           runtimeMode: "approval-required",
           activeTurnId: null,
           updatedAt: createdAt,
@@ -1132,6 +1146,8 @@ describe("ProviderRuntimeIngestion", () => {
           threadId: sourceThreadId,
           status: "ready",
           providerName: "codex",
+          providerSessionId: null,
+          providerThreadId: null,
           runtimeMode: "approval-required",
           activeTurnId: null,
           updatedAt: createdAt,
@@ -1167,6 +1183,8 @@ describe("ProviderRuntimeIngestion", () => {
           threadId: targetThreadId,
           status: "ready",
           providerName: "codex",
+          providerSessionId: null,
+          providerThreadId: null,
           runtimeMode: "approval-required",
           activeTurnId: null,
           updatedAt: createdAt,
@@ -1823,6 +1841,9 @@ describe("ProviderRuntimeIngestion", () => {
       provider: "codex",
       createdAt: now,
       threadId: asThreadId("thread-1"),
+      payload: {
+        providerThreadId: "provider-thread-9",
+      },
     });
     harness.emit({
       type: "item.started",
@@ -1850,6 +1871,7 @@ describe("ProviderRuntimeIngestion", () => {
     );
 
     expect(thread.session?.status).toBe("ready");
+    expect(thread.session?.providerThreadId).toBe("provider-thread-9");
     expect(
       thread.activities.some(
         (activity: ProviderRuntimeTestActivity) => activity.kind === "tool.started",

@@ -8,6 +8,7 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { useSettings } from "../hooks/useSettings";
 import { buildProviderResumeCommand, providerTerminalLabel } from "../lib/providerTerminalCommands";
 import { readNativeApi } from "../nativeApi";
+import { useStore } from "../store";
 import { useProjectById, useThreadById } from "../storeSelectors";
 import {
   type ThreadTerminalResumeBinding,
@@ -23,6 +24,8 @@ interface ThreadTerminalViewProps {
 }
 
 const launchedProviderThreadIdsThisSession = new Set<string>();
+const DEFAULT_PROVIDER_TERMINAL_COLS = 120;
+const DEFAULT_PROVIDER_TERMINAL_ROWS = 30;
 
 export function resolveProviderTerminalStartup(input: {
   startupRequest: ThreadTerminalStartupRequest | null;
@@ -55,6 +58,23 @@ export function resolveProviderTerminalStartup(input: {
     }),
     shouldFreshResumeTerminal: true,
   };
+}
+
+export function resolveTerminalResumeBinding(input: {
+  threadProvider: ProviderKind | null;
+  resumeBinding: ThreadTerminalResumeBinding | null;
+  codexThreadId: string | null | undefined;
+}): ThreadTerminalResumeBinding | null {
+  if (
+    input.threadProvider === "codex" &&
+    input.resumeBinding?.provider === "codex" &&
+    input.codexThreadId &&
+    input.resumeBinding.sessionId === input.codexThreadId
+  ) {
+    return null;
+  }
+
+  return input.resumeBinding;
 }
 
 function providerLabelForThread(
@@ -93,6 +113,9 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
   const clearTerminalStartupRequest = useTerminalStateStore(
     (state) => state.clearTerminalStartupRequest,
   );
+  const clearTerminalResumeBinding = useTerminalStateStore(
+    (state) => state.clearTerminalResumeBinding,
+  );
   const setTerminalResumeBinding = useTerminalStateStore((state) => state.setTerminalResumeBinding);
   const worktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
   const cwd = useMemo(
@@ -122,9 +145,20 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
     }
     return Object.values(draftComposer?.modelSelectionByProvider ?? {})[0]?.provider ?? null;
   }, [draftComposer]);
+  const threadProvider = serverThread?.modelSelection.provider ?? draftProvider;
+  const effectiveResumeBinding = useMemo<ThreadTerminalResumeBinding | null>(
+    () =>
+      resolveTerminalResumeBinding({
+        threadProvider,
+        resumeBinding,
+        codexThreadId: serverThread?.codexThreadId,
+      }),
+    [resumeBinding, serverThread?.codexThreadId, threadProvider],
+  );
   const providerLabel = providerLabelForThread(serverThread, draftProvider);
   const launchCommandRef = useRef<string | null>(null);
-  const sessionResolveAttemptRef = useRef<string | null>(null);
+  const startupSessionResolveAttemptRef = useRef<string | null>(null);
+  const resumeBindingResolveAttemptRef = useRef<string | null>(null);
   const autoLaunchConsumedRef = useRef(false);
 
   useEffect(() => {
@@ -134,6 +168,89 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
   useEffect(() => {
     autoLaunchConsumedRef.current = false;
   }, [threadId]);
+
+  useEffect(() => {
+    if (
+      threadProvider !== "codex" ||
+      resumeBinding?.provider !== "codex" ||
+      !serverThread?.codexThreadId ||
+      resumeBinding.sessionId !== serverThread.codexThreadId
+    ) {
+      return;
+    }
+
+    clearTerminalResumeBinding(threadId);
+  }, [
+    clearTerminalResumeBinding,
+    resumeBinding,
+    serverThread?.codexThreadId,
+    threadId,
+    threadProvider,
+  ]);
+
+  useEffect(() => {
+    if (
+      !cwd ||
+      threadProvider !== "codex" ||
+      startupRequest !== null ||
+      effectiveResumeBinding !== null
+    ) {
+      return;
+    }
+
+    if (launchedProviderThreadIdsThisSession.has(threadId)) {
+      return;
+    }
+
+    const startedAt = serverThread?.createdAt ?? draftThread?.createdAt;
+    if (!startedAt) {
+      return;
+    }
+
+    const api = readNativeApi();
+    if (!api) {
+      return;
+    }
+
+    const codexThreadId = serverThread?.codexThreadId ?? null;
+    const resolutionKey = `${threadId}:${startedAt}:${codexThreadId ?? ""}`;
+    if (resumeBindingResolveAttemptRef.current === resolutionKey) {
+      return;
+    }
+    resumeBindingResolveAttemptRef.current = resolutionKey;
+
+    void api.server
+      .resolveProviderSession({
+        provider: threadProvider,
+        cwd,
+        startedAt,
+        ...(settings.providers.codex.homePath.trim().length > 0
+          ? { codexHomePath: settings.providers.codex.homePath.trim() }
+          : {}),
+        ...(codexThreadId ? { excludeSessionId: codexThreadId } : {}),
+      })
+      .then((result) => {
+        if (!result.sessionId) {
+          return;
+        }
+        setTerminalResumeBinding(threadId, {
+          provider: threadProvider,
+          sessionId: result.sessionId,
+        });
+      })
+      .catch(() => undefined);
+  }, [
+    cwd,
+    draftThread?.createdAt,
+    effectiveResumeBinding,
+    serverThread?.codexThreadId,
+    serverThread?.createdAt,
+    setTerminalResumeBinding,
+    settings.providers.codex.homePath,
+    startupRequest,
+    threadId,
+    threadProvider,
+  ]);
 
   useEffect(() => {
     if (!cwd) {
@@ -147,7 +264,7 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
 
     const { commandToRun, shouldFreshResumeTerminal } = resolveProviderTerminalStartup({
       startupRequest,
-      resumeBinding,
+      resumeBinding: effectiveResumeBinding,
       settings,
       launchedInSession: launchedProviderThreadIdsThisSession.has(threadId),
     });
@@ -167,32 +284,30 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
     ensureTerminal(threadId, terminalId, { active: true, open: true });
 
     const runStartupCommand = async () => {
-      if (shouldFreshResumeTerminal) {
-        await api.terminal
-          .close({
-            threadId,
-            terminalId,
-            deleteHistory: true,
-          })
-          .catch(() => undefined);
-      }
+      const terminalOpenInput = {
+        threadId,
+        terminalId,
+        cwd,
+        ...(worktreePath !== null ? { worktreePath } : {}),
+        env: runtimeEnv,
+      };
 
-      await api.terminal
-        .open({
+      await (
+        shouldFreshResumeTerminal
+          ? api.terminal.restart({
+              ...terminalOpenInput,
+              cols: DEFAULT_PROVIDER_TERMINAL_COLS,
+              rows: DEFAULT_PROVIDER_TERMINAL_ROWS,
+            })
+          : api.terminal.open(terminalOpenInput)
+      ).then(() => {
+        setTerminalLaunchContext(threadId, { cwd, worktreePath });
+        return api.terminal.write({
           threadId,
           terminalId,
-          cwd,
-          ...(worktreePath !== null ? { worktreePath } : {}),
-          env: runtimeEnv,
-        })
-        .then(() => {
-          setTerminalLaunchContext(threadId, { cwd, worktreePath });
-          return api.terminal.write({
-            threadId,
-            terminalId,
-            data: `${commandToRun}\r`,
-          });
+          data: `${commandToRun}\r`,
         });
+      });
 
       launchedProviderThreadIdsThisSession.add(threadId);
 
@@ -209,12 +324,14 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
       }
 
       const resolutionKey = `${threadId}:${startupRequest.startedAt}`;
-      if (sessionResolveAttemptRef.current === resolutionKey) {
+      if (startupSessionResolveAttemptRef.current === resolutionKey) {
         return;
       }
-      sessionResolveAttemptRef.current = resolutionKey;
+      startupSessionResolveAttemptRef.current = resolutionKey;
       try {
         for (let attempt = 0; attempt < 8; attempt += 1) {
+          const currentCodexThreadId =
+            useStore.getState().threads.find((t) => t.id === threadId)?.codexThreadId ?? null;
           const result = await api.server.resolveProviderSession({
             provider: startupRequest.provider,
             cwd,
@@ -223,6 +340,7 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
             settings.providers.codex.homePath.trim().length > 0
               ? { codexHomePath: settings.providers.codex.homePath.trim() }
               : {}),
+            ...(currentCodexThreadId ? { excludeSessionId: currentCodexThreadId } : {}),
           });
           if (result.sessionId) {
             setTerminalResumeBinding(threadId, {
@@ -234,7 +352,7 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
           await waitForMs(750);
         }
       } finally {
-        sessionResolveAttemptRef.current = null;
+        startupSessionResolveAttemptRef.current = null;
       }
     };
 
@@ -258,7 +376,7 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
     cwd,
     ensureTerminal,
     providerLabel,
-    resumeBinding,
+    effectiveResumeBinding,
     runtimeEnv,
     setTerminalResumeBinding,
     settings,

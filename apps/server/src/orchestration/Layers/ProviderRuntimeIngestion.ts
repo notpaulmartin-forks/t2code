@@ -958,6 +958,11 @@ const make = Effect.fn("make")(function* () {
             : status === "ready"
               ? null
               : (thread.session?.lastError ?? null);
+      const providerSessionId = thread.session?.providerSessionId ?? null;
+      const providerThreadId =
+        event.type === "thread.started"
+          ? (event.payload.providerThreadId ?? thread.session?.providerThreadId ?? null)
+          : (thread.session?.providerThreadId ?? null);
 
       if (shouldApplyThreadLifecycle) {
         if (event.type === "turn.started" && acceptedTurnStartedSourcePlan !== null) {
@@ -985,6 +990,8 @@ const make = Effect.fn("make")(function* () {
             threadId: thread.id,
             status,
             providerName: event.provider,
+            providerSessionId,
+            providerThreadId,
             runtimeMode: thread.session?.runtimeMode ?? "full-access",
             activeTurnId: nextActiveTurnId,
             lastError,
@@ -1157,6 +1164,8 @@ const make = Effect.fn("make")(function* () {
             threadId: thread.id,
             status: "error",
             providerName: event.provider,
+            providerSessionId: thread.session?.providerSessionId ?? null,
+            providerThreadId: thread.session?.providerThreadId ?? null,
             runtimeMode: thread.session?.runtimeMode ?? "full-access",
             activeTurnId: eventTurnId ?? null,
             lastError: runtimeErrorMessage,

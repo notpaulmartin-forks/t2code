@@ -1,7 +1,7 @@
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
 import { describe, expect, it } from "vitest";
 
-import { resolveProviderTerminalStartup } from "./ThreadTerminalView";
+import { resolveProviderTerminalStartup, resolveTerminalResumeBinding } from "./ThreadTerminalView";
 
 describe("resolveProviderTerminalStartup", () => {
   it("returns startup requests directly", () => {
@@ -55,5 +55,36 @@ describe("resolveProviderTerminalStartup", () => {
         launchedInSession: true,
       }),
     ).toEqual({ commandToRun: null, shouldFreshResumeTerminal: false });
+  });
+});
+
+describe("resolveTerminalResumeBinding", () => {
+  it("ignores stale codex bindings that match the provider thread id", () => {
+    expect(
+      resolveTerminalResumeBinding({
+        threadProvider: "codex",
+        resumeBinding: {
+          provider: "codex",
+          sessionId: "provider-thread-1",
+        },
+        codexThreadId: "provider-thread-1",
+      }),
+    ).toBeNull();
+  });
+
+  it("keeps codex bindings that differ from the provider thread id", () => {
+    expect(
+      resolveTerminalResumeBinding({
+        threadProvider: "codex",
+        resumeBinding: {
+          provider: "codex",
+          sessionId: "cli-session-1",
+        },
+        codexThreadId: "provider-thread-1",
+      }),
+    ).toEqual({
+      provider: "codex",
+      sessionId: "cli-session-1",
+    });
   });
 });

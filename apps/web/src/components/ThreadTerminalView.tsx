@@ -1,11 +1,19 @@
-import { type ProviderKind } from "@t3tools/contracts";
+import {
+  type KeybindingCommand,
+  type ProjectId,
+  type ProjectScript,
+  type ProviderKind,
+} from "@t3tools/contracts";
 import { type UnifiedSettings } from "@t3tools/contracts/settings";
 import { DEFAULT_THREAD_TERMINAL_ID, type Thread } from "../types";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useSettings } from "../hooks/useSettings";
+import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { buildProviderResumeCommand, providerTerminalLabel } from "../lib/providerTerminalCommands";
 import { readNativeApi } from "../nativeApi";
 import { useWsConnectionStatus } from "../rpc/wsConnectionState";
@@ -16,9 +24,22 @@ import {
   type ThreadTerminalStartupRequest,
 } from "../terminalStateStore";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
-import { SidebarTrigger } from "./ui/sidebar";
 import { ThreadTerminalSurface } from "./ThreadTerminalSurface";
 import { toastManager } from "./ui/toast";
+import { ChatHeader } from "./chat/ChatHeader";
+import { useServerAvailableEditors, useServerKeybindings } from "~/rpc/serverState";
+import { gitStatusQueryOptions } from "~/lib/gitReactQuery";
+import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import { shortcutLabelForCommand } from "../keybindings";
+import { cn, newCommandId } from "~/lib/utils";
+import { isElectron } from "../env";
+import { commandForProjectScript, nextProjectScriptId } from "../projectScripts";
+import { decodeProjectScriptKeybindingRule } from "~/lib/projectScriptKeybindings";
+import { type NewProjectScriptInput } from "./ProjectScriptsControl";
+import {
+  LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
+  LastInvokedScriptByProjectSchema,
+} from "./ChatView.logic";
 
 interface ThreadTerminalViewProps {
   threadId: Thread["id"];
@@ -121,6 +142,18 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
     (state) => state.clearTerminalResumeBinding,
   );
   const setTerminalResumeBinding = useTerminalStateStore((state) => state.setTerminalResumeBinding);
+  const storeNewTerminal = useTerminalStateStore((state) => state.newTerminal);
+  const storeSetActiveTerminal = useTerminalStateStore((state) => state.setActiveTerminal);
+  const keybindings = useServerKeybindings();
+  const availableEditors = useServerAvailableEditors();
+  const navigate = useNavigate();
+  const diffSearch = useSearch({ strict: false, select: (search) => parseDiffRouteSearch(search) });
+  const diffOpen = diffSearch.diff === "1";
+  const [lastInvokedScriptByProjectId, setLastInvokedScriptByProjectId] = useLocalStorage(
+    LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
+    {},
+    LastInvokedScriptByProjectSchema,
+  );
   const worktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
   const cwd = useMemo(
     () =>
@@ -160,6 +193,205 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
     [resumeBinding, serverThread?.codexThreadId, threadProvider],
   );
   const providerLabel = providerLabelForThread(serverThread, draftProvider);
+  const gitStatusQuery = useQuery(gitStatusQueryOptions(cwd));
+  const isGitRepo = gitStatusQuery.data?.isRepo ?? true;
+  const terminalToggleShortcutLabel = useMemo(
+    () => shortcutLabelForCommand(keybindings, "terminal.toggle"),
+    [keybindings],
+  );
+  const diffPanelShortcutLabel = useMemo(
+    () => shortcutLabelForCommand(keybindings, "diff.toggle"),
+    [keybindings],
+  );
+  const onToggleDiff = useCallback(() => {
+    void navigate({
+      to: "/$threadId",
+      params: { threadId },
+      replace: true,
+      search: (previous) => {
+        const rest = stripDiffSearchParams(previous);
+        return diffOpen ? { ...rest, diff: undefined } : { ...rest, diff: "1" };
+      },
+    });
+  }, [diffOpen, navigate, threadId]);
+
+  const persistProjectScripts = useCallback(
+    async (input: {
+      projectId: ProjectId;
+      projectCwd: string;
+      previousScripts: ProjectScript[];
+      nextScripts: ProjectScript[];
+      keybinding?: string | null;
+      keybindingCommand: KeybindingCommand;
+    }) => {
+      const api = readNativeApi();
+      if (!api) return;
+      await api.orchestration.dispatchCommand({
+        type: "project.meta.update",
+        commandId: newCommandId(),
+        projectId: input.projectId,
+        scripts: input.nextScripts,
+      });
+      const keybindingRule = decodeProjectScriptKeybindingRule({
+        keybinding: input.keybinding,
+        command: input.keybindingCommand,
+      });
+      if (isElectron && keybindingRule) {
+        await api.server.upsertKeybinding(keybindingRule);
+      }
+    },
+    [],
+  );
+
+  const saveProjectScript = useCallback(
+    async (input: NewProjectScriptInput) => {
+      if (!project) return;
+      const nextId = nextProjectScriptId(
+        input.name,
+        project.scripts.map((s) => s.id),
+      );
+      const nextScript: ProjectScript = {
+        id: nextId,
+        name: input.name,
+        command: input.command,
+        icon: input.icon,
+        runOnWorktreeCreate: input.runOnWorktreeCreate,
+      };
+      const nextScripts = input.runOnWorktreeCreate
+        ? [
+            ...project.scripts.map((s) =>
+              s.runOnWorktreeCreate ? { ...s, runOnWorktreeCreate: false } : s,
+            ),
+            nextScript,
+          ]
+        : [...project.scripts, nextScript];
+      await persistProjectScripts({
+        projectId: project.id,
+        projectCwd: project.cwd,
+        previousScripts: project.scripts,
+        nextScripts,
+        keybinding: input.keybinding,
+        keybindingCommand: commandForProjectScript(nextId),
+      });
+    },
+    [project, persistProjectScripts],
+  );
+
+  const updateProjectScript = useCallback(
+    async (scriptId: string, input: NewProjectScriptInput) => {
+      if (!project) return;
+      const existingScript = project.scripts.find((script) => script.id === scriptId);
+      if (!existingScript) throw new Error("Script not found.");
+      const updatedScript: ProjectScript = {
+        ...existingScript,
+        name: input.name,
+        command: input.command,
+        icon: input.icon,
+        runOnWorktreeCreate: input.runOnWorktreeCreate,
+      };
+      const nextScripts = project.scripts.map((script) =>
+        script.id === scriptId
+          ? updatedScript
+          : input.runOnWorktreeCreate
+            ? { ...script, runOnWorktreeCreate: false }
+            : script,
+      );
+      await persistProjectScripts({
+        projectId: project.id,
+        projectCwd: project.cwd,
+        previousScripts: project.scripts,
+        nextScripts,
+        keybinding: input.keybinding,
+        keybindingCommand: commandForProjectScript(scriptId),
+      });
+    },
+    [project, persistProjectScripts],
+  );
+
+  const deleteProjectScript = useCallback(
+    async (scriptId: string) => {
+      if (!project) return;
+      const nextScripts = project.scripts.filter((s) => s.id !== scriptId);
+      const deletedName = project.scripts.find((s) => s.id === scriptId)?.name;
+      try {
+        await persistProjectScripts({
+          projectId: project.id,
+          projectCwd: project.cwd,
+          previousScripts: project.scripts,
+          nextScripts,
+          keybinding: null,
+          keybindingCommand: commandForProjectScript(scriptId),
+        });
+      } catch {
+        toastManager.add({
+          type: "error",
+          title: `Failed to delete script${deletedName ? ` "${deletedName}"` : ""}`,
+        });
+      }
+    },
+    [project, persistProjectScripts],
+  );
+
+  const runProjectScript = useCallback(
+    async (script: ProjectScript) => {
+      const api = readNativeApi();
+      if (!api || !project || !cwd) return;
+      setLastInvokedScriptByProjectId((current) => {
+        if (current[project.id] === script.id) return current;
+        return { ...current, [project.id]: script.id };
+      });
+      const baseTerminalId =
+        terminalState.activeTerminalId ||
+        terminalState.terminalIds[0] ||
+        DEFAULT_THREAD_TERMINAL_ID;
+      const isBaseTerminalBusy = terminalState.runningTerminalIds.includes(baseTerminalId);
+      const targetTerminalId = isBaseTerminalBusy
+        ? `terminal-${crypto.randomUUID()}`
+        : baseTerminalId;
+      if (isBaseTerminalBusy) {
+        storeNewTerminal(threadId, targetTerminalId);
+      } else {
+        storeSetActiveTerminal(threadId, targetTerminalId);
+      }
+      const scriptRuntimeEnv = projectScriptRuntimeEnv({
+        project: { cwd: project.cwd },
+        worktreePath,
+      });
+      try {
+        await api.terminal.open({
+          threadId,
+          terminalId: targetTerminalId,
+          cwd,
+          ...(worktreePath !== null ? { worktreePath } : {}),
+          env: scriptRuntimeEnv,
+        });
+        await api.terminal.write({
+          threadId,
+          terminalId: targetTerminalId,
+          data: `${script.command}\r`,
+        });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to run script "${script.name}"`,
+          description: error instanceof Error ? error.message : "An unexpected error occurred.",
+        });
+      }
+    },
+    [
+      project,
+      cwd,
+      worktreePath,
+      threadId,
+      terminalState.activeTerminalId,
+      terminalState.runningTerminalIds,
+      terminalState.terminalIds,
+      storeNewTerminal,
+      storeSetActiveTerminal,
+      setLastInvokedScriptByProjectId,
+    ],
+  );
+
   const launchCommandRef = useRef<string | null>(null);
   const startupSessionResolveAttemptRef = useRef<string | null>(null);
   const resumeBindingResolveAttemptRef = useRef<string | null>(null);
@@ -419,18 +651,37 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
-      <header className="border-b border-border px-3 py-2 md:px-4">
-        <div className="flex items-center gap-3">
-          <SidebarTrigger className="size-7 shrink-0 md:hidden" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-foreground">
-              {serverThread?.title ?? `${providerLabel} thread`}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {project.name} - {providerLabel}
-            </p>
-          </div>
-        </div>
+      <header
+        className={cn(
+          "border-b border-border px-3 sm:px-5",
+          isElectron ? "drag-region flex h-[52px] items-center" : "py-2 sm:py-3",
+        )}
+      >
+        <ChatHeader
+          activeThreadId={threadId}
+          activeThreadTitle={serverThread?.title ?? `${providerLabel} thread`}
+          activeProjectName={project.name}
+          isGitRepo={isGitRepo}
+          openInCwd={cwd}
+          activeProjectScripts={project.scripts}
+          preferredScriptId={lastInvokedScriptByProjectId[project.id] ?? null}
+          keybindings={keybindings}
+          availableEditors={availableEditors}
+          terminalAvailable={false}
+          terminalOpen={false}
+          terminalToggleShortcutLabel={terminalToggleShortcutLabel}
+          diffToggleShortcutLabel={diffPanelShortcutLabel}
+          gitCwd={cwd}
+          diffOpen={diffOpen}
+          onRunProjectScript={(script) => {
+            void runProjectScript(script);
+          }}
+          onAddProjectScript={saveProjectScript}
+          onUpdateProjectScript={updateProjectScript}
+          onDeleteProjectScript={deleteProjectScript}
+          onToggleTerminal={() => undefined}
+          onToggleDiff={onToggleDiff}
+        />
       </header>
       <div className="min-h-0 flex-1 p-3 md:p-4">
         <ThreadTerminalSurface

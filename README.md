@@ -1,11 +1,19 @@
-# T2 Code
+# T2 Code is a fork of [T3 Code](https://github.com/pingdotgg/t3code)
 
-T2 Code is a minimal web GUI for coding agents (currently Codex and Claude, more coming soon).
+- **Tracking removed!**
+- **Uses the CLIs** (claude code / codex / opencode) inside the T2 Code App instead of the chat UI since it's often broken. *Chats are still accessible via the sidebar
+- Added **OpenCode support**
+
+Forked at version 0.15.0 (commit [cf2c62](https://github.com/pingdotgg/t3code/commit/cf2c62))
+
+# Original T3 Code README
+
+T3 Code is a minimal web GUI for coding agents (currently Codex and Claude, more coming soon).
 
 ## Installation
 
 > [!WARNING]
-> T2 Code currently supports Codex and Claude.
+> T3 Code currently supports Codex and Claude.
 > Install and authenticate at least one provider before use:
 >
 > - Codex: install [Codex CLI](https://github.com/openai/codex) and run `codex login`

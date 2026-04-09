@@ -27,7 +27,6 @@ import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnap
 import { OrchestrationReactor } from "./orchestration/Services/OrchestrationReactor";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents";
 import { ServerSettingsService } from "./serverSettings";
-import { AnalyticsService } from "./telemetry/Services/AnalyticsService";
 
 const isWildcardHost = (host: string | undefined): boolean =>
   host === "0.0.0.0" || host === "::" || host === "[::]";
@@ -116,37 +115,6 @@ export const makeCommandGate = Effect.gen(function* () {
       }),
   } satisfies CommandGate;
 });
-
-export const recordStartupHeartbeat = Effect.gen(function* () {
-  const analytics = yield* AnalyticsService;
-  const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
-
-  const { threadCount, projectCount } = yield* projectionSnapshotQuery.getCounts().pipe(
-    Effect.catch((cause) =>
-      Effect.logWarning("failed to gather startup projection counts for telemetry", {
-        cause,
-      }).pipe(
-        Effect.as({
-          threadCount: 0,
-          projectCount: 0,
-        }),
-      ),
-    ),
-  );
-
-  yield* analytics.record("server.boot.heartbeat", {
-    threadCount,
-    projectCount,
-  });
-});
-
-export const launchStartupHeartbeat = recordStartupHeartbeat.pipe(
-  Effect.annotateSpans({ "startup.phase": "heartbeat.record" }),
-  Effect.withSpan("server.startup.heartbeat.record"),
-  Effect.ignoreCause({ log: true }),
-  Effect.forkScoped,
-  Effect.asVoid,
-);
 
 const autoBootstrapWelcome = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig;
@@ -358,8 +326,6 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
         }),
       );
 
-      yield* Effect.logDebug("startup phase: recording startup heartbeat");
-      yield* launchStartupHeartbeat;
       yield* Effect.logDebug("startup phase: browser open check");
       yield* runStartupPhase("browser.open", maybeOpenBrowser);
       yield* Effect.logDebug("startup phase: complete");

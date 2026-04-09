@@ -43,7 +43,6 @@ import {
   SqlitePersistenceMemory,
 } from "../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
-import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
 
 const defaultServerSettingsLayer = ServerSettingsService.layerTest();
 
@@ -268,7 +267,6 @@ function makeProviderServiceLayer() {
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
         Layer.provide(defaultServerSettingsLayer),
-        Layer.provideMerge(AnalyticsService.layerTest),
       ),
       directoryLayer,
 
@@ -313,7 +311,6 @@ it.effect("ProviderServiceLive rejects new sessions for disabled providers", () 
       Layer.provide(providerAdapterLayer),
       Layer.provide(directoryLayer),
       Layer.provide(serverSettingsLayer),
-      Layer.provide(AnalyticsService.layerTest),
     );
 
     const failure = yield* Effect.flip(
@@ -366,7 +363,6 @@ it.effect("ProviderServiceLive keeps persisted resumable sessions on startup", (
       Layer.provide(Layer.succeed(ProviderAdapterRegistry, registry)),
       Layer.provide(directoryLayer),
       Layer.provide(defaultServerSettingsLayer),
-      Layer.provide(AnalyticsService.layerTest),
     );
 
     yield* Effect.gen(function* () {
@@ -426,7 +422,6 @@ it.effect(
         Layer.provide(Layer.succeed(ProviderAdapterRegistry, firstRegistry)),
         Layer.provide(firstDirectoryLayer),
         Layer.provide(defaultServerSettingsLayer),
-        Layer.provide(AnalyticsService.layerTest),
       );
       const updatedResumeCursor = {
         threadId: asThreadId("thread-1"),
@@ -478,7 +473,6 @@ it.effect(
         Layer.provide(Layer.succeed(ProviderAdapterRegistry, secondRegistry)),
         Layer.provide(secondDirectoryLayer),
         Layer.provide(defaultServerSettingsLayer),
-        Layer.provide(AnalyticsService.layerTest),
       );
 
       secondCodex.startSession.mockClear();
@@ -839,7 +833,6 @@ routing.layer("ProviderServiceLive routing", (it) => {
         Layer.provide(Layer.succeed(ProviderAdapterRegistry, firstRegistry)),
         Layer.provide(firstDirectoryLayer),
         Layer.provide(defaultServerSettingsLayer),
-        Layer.provide(AnalyticsService.layerTest),
       );
 
       const initial = yield* Effect.gen(function* () {
@@ -872,7 +865,6 @@ routing.layer("ProviderServiceLive routing", (it) => {
         Layer.provide(Layer.succeed(ProviderAdapterRegistry, secondRegistry)),
         Layer.provide(secondDirectoryLayer),
         Layer.provide(defaultServerSettingsLayer),
-        Layer.provide(AnalyticsService.layerTest),
       );
 
       secondClaude.startSession.mockClear();

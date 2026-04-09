@@ -63,7 +63,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
-        assert.equal(env.T3CODE_HOME, resolve(homedir(), ".t3"));
+        assert.equal(env.T3CODE_HOME, resolve(homedir(), ".t2"));
       }),
     );
 

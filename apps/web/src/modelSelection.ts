@@ -38,6 +38,13 @@ const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConf
     placeholder: "your-codex-model-slug",
     example: "gpt-6.7-codex-ultra-preview",
   },
+  opencode: {
+    provider: "opencode",
+    title: "OpenCode",
+    description: "Save additional OpenCode model slugs for thread metadata and session reopen.",
+    placeholder: "your-opencode-model-slug",
+    example: "opencode/gpt-5.2-codex",
+  },
   claudeAgent: {
     provider: "claudeAgent",
     title: "Claude",
@@ -158,6 +165,12 @@ export function getCustomModelOptionsByProvider(
       providers,
       "codex",
       selectedProvider === "codex" ? selectedModel : undefined,
+    ),
+    opencode: getAppModelOptions(
+      settings,
+      providers,
+      "opencode",
+      selectedProvider === "opencode" ? selectedModel : undefined,
     ),
     claudeAgent: getAppModelOptions(
       settings,

@@ -9,6 +9,9 @@ function binaryPathForProvider(provider: ProviderKind, settings: UnifiedSettings
   if (provider === "codex") {
     return settings.providers.codex.binaryPath || "codex";
   }
+  if (provider === "opencode") {
+    return settings.providers.opencode.binaryPath || "opencode";
+  }
   return settings.providers.claudeAgent.binaryPath || "claude";
 }
 
@@ -45,6 +48,12 @@ export function buildProviderLaunchCommand(input: {
     return parts.join(" ");
   }
 
+  if (input.provider === "opencode") {
+    return input.sessionId && input.sessionId.trim().length > 0
+      ? `exec ${commandPrefix} --session ${shellQuote(input.sessionId)}`
+      : `exec ${commandPrefix}`;
+  }
+
   return commandPrefix;
 }
 
@@ -60,16 +69,29 @@ export function buildProviderResumeCommand(input: {
     return `${commandPrefix} --resume ${quotedSessionId}`;
   }
 
+  if (input.provider === "opencode") {
+    return `exec ${commandPrefix} --session ${quotedSessionId}`;
+  }
+
   return `${commandPrefix} resume ${quotedSessionId}`;
 }
 
 export function buildDefaultThreadTitle(provider: ProviderKind): string {
-  return provider === "codex" ? "Codex thread" : "Claude Code thread";
+  if (provider === "codex") {
+    return "Codex thread";
+  }
+  if (provider === "opencode") {
+    return "OpenCode thread";
+  }
+  return "Claude Code thread";
 }
 
 export function providerTerminalLabel(provider: ProviderKind | null | undefined): string {
   if (!provider) {
     return "Terminal";
+  }
+  if (provider === "opencode") {
+    return "OpenCode";
   }
   if (provider === "claudeAgent") {
     return "Claude Code";

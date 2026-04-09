@@ -8,6 +8,7 @@ import { useComposerDraftStore } from "../composerDraftStore";
 import { useSettings } from "../hooks/useSettings";
 import { buildProviderResumeCommand, providerTerminalLabel } from "../lib/providerTerminalCommands";
 import { readNativeApi } from "../nativeApi";
+import { useWsConnectionStatus } from "../rpc/wsConnectionState";
 import { useStore } from "../store";
 import { useProjectById, useThreadById } from "../storeSelectors";
 import {
@@ -23,7 +24,9 @@ interface ThreadTerminalViewProps {
   threadId: Thread["id"];
 }
 
-const launchedProviderThreadIdsThisSession = new Set<string>();
+// Maps threadId → the WS connectedAt timestamp when it was launched, so that a server
+// reconnect (new connectedAt) correctly clears the "already launched" guard.
+const launchedProviderThreadIdsByConnectionId = new Map<string, string>();
 const DEFAULT_PROVIDER_TERMINAL_COLS = 120;
 const DEFAULT_PROVIDER_TERMINAL_ROWS = 30;
 
@@ -98,6 +101,7 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
   const draftComposer = useComposerDraftStore((store) => store.draftsByThreadId[threadId] ?? null);
   const project = useProjectById(serverThread?.projectId ?? draftThread?.projectId);
   const settings = useSettings();
+  const wsConnectedAt = useWsConnectionStatus().connectedAt;
   const terminalState = useTerminalStateStore((state) =>
     selectThreadTerminalState(state.terminalStateByThreadId, threadId),
   );
@@ -167,7 +171,10 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
 
   useEffect(() => {
     autoLaunchConsumedRef.current = false;
-  }, [threadId]);
+    launchCommandRef.current = null;
+    resumeBindingResolveAttemptRef.current = null;
+    startupSessionResolveAttemptRef.current = null;
+  }, [threadId, wsConnectedAt]);
 
   useEffect(() => {
     if (
@@ -191,14 +198,14 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
   useEffect(() => {
     if (
       !cwd ||
-      threadProvider !== "codex" ||
+      (threadProvider !== "codex" && threadProvider !== "opencode") ||
       startupRequest !== null ||
       effectiveResumeBinding !== null
     ) {
       return;
     }
 
-    if (launchedProviderThreadIdsThisSession.has(threadId)) {
+    if (wsConnectedAt && launchedProviderThreadIdsByConnectionId.get(threadId) === wsConnectedAt) {
       return;
     }
 
@@ -227,6 +234,10 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
         ...(settings.providers.codex.homePath.trim().length > 0
           ? { codexHomePath: settings.providers.codex.homePath.trim() }
           : {}),
+        ...(threadProvider === "opencode" &&
+        settings.providers.opencode.binaryPath.trim().length > 0
+          ? { openCodeBinaryPath: settings.providers.opencode.binaryPath.trim() }
+          : {}),
         ...(codexThreadId ? { excludeSessionId: codexThreadId } : {}),
       })
       .then((result) => {
@@ -247,9 +258,11 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
     serverThread?.createdAt,
     setTerminalResumeBinding,
     settings.providers.codex.homePath,
+    settings.providers.opencode.binaryPath,
     startupRequest,
     threadId,
     threadProvider,
+    wsConnectedAt,
   ]);
 
   useEffect(() => {
@@ -262,11 +275,14 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
       return;
     }
 
+    const launchedInSession =
+      wsConnectedAt !== null &&
+      launchedProviderThreadIdsByConnectionId.get(threadId) === wsConnectedAt;
     const { commandToRun, shouldFreshResumeTerminal } = resolveProviderTerminalStartup({
       startupRequest,
       resumeBinding: effectiveResumeBinding,
       settings,
-      launchedInSession: launchedProviderThreadIdsThisSession.has(threadId),
+      launchedInSession,
     });
     if (!commandToRun) {
       return;
@@ -309,9 +325,14 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
         });
       });
 
-      launchedProviderThreadIdsThisSession.add(threadId);
+      if (wsConnectedAt) {
+        launchedProviderThreadIdsByConnectionId.set(threadId, wsConnectedAt);
+      }
 
-      if (startupRequest?.provider === "claudeAgent" && startupRequest.sessionId) {
+      if (
+        startupRequest?.sessionId &&
+        (startupRequest.provider === "claudeAgent" || startupRequest.provider === "opencode")
+      ) {
         setTerminalResumeBinding(threadId, {
           provider: startupRequest.provider,
           sessionId: startupRequest.sessionId,
@@ -319,7 +340,7 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
         return;
       }
 
-      if (startupRequest?.provider !== "codex") {
+      if (startupRequest?.provider !== "codex" && startupRequest?.provider !== "opencode") {
         return;
       }
 
@@ -329,7 +350,7 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
       }
       startupSessionResolveAttemptRef.current = resolutionKey;
       try {
-        for (let attempt = 0; attempt < 8; attempt += 1) {
+        for (let attempt = 0; attempt < 20; attempt += 1) {
           const currentCodexThreadId =
             useStore.getState().threads.find((t) => t.id === threadId)?.codexThreadId ?? null;
           const result = await api.server.resolveProviderSession({
@@ -339,6 +360,10 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
             ...(startupRequest.provider === "codex" &&
             settings.providers.codex.homePath.trim().length > 0
               ? { codexHomePath: settings.providers.codex.homePath.trim() }
+              : {}),
+            ...(startupRequest.provider === "opencode" &&
+            settings.providers.opencode.binaryPath.trim().length > 0
+              ? { openCodeBinaryPath: settings.providers.opencode.binaryPath.trim() }
               : {}),
             ...(currentCodexThreadId ? { excludeSessionId: currentCodexThreadId } : {}),
           });
@@ -385,6 +410,7 @@ export default function ThreadTerminalView({ threadId }: ThreadTerminalViewProps
     terminalState.activeTerminalId,
     threadId,
     worktreePath,
+    wsConnectedAt,
   ]);
 
   if (!project) {

@@ -89,6 +89,7 @@ export interface WsRpcClient {
       patch: ServerSettingsPatch,
     ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverUpdateSettings>>;
     readonly resolveProviderSession: RpcUnaryMethod<typeof WS_METHODS.serverResolveProviderSession>;
+    readonly createOpenCodeSession: RpcUnaryMethod<typeof WS_METHODS.serverCreateOpenCodeSession>;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
   };
@@ -196,6 +197,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverUpdateSettings]({ patch })),
       resolveProviderSession: (input) =>
         transport.request((client) => client[WS_METHODS.serverResolveProviderSession](input)),
+      createOpenCodeSession: (input) =>
+        transport.request((client) => client[WS_METHODS.serverCreateOpenCodeSession](input)),
       subscribeConfig: (listener, options) =>
         transport.subscribe(
           (client) => client[WS_METHODS.subscribeServerConfig]({}),

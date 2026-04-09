@@ -1,12 +1,15 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "@effect/vitest";
 
 import { resolveProviderSession } from "./providerCliSessions";
 
 const tempDirectories: string[] = [];
+const execFileAsync = promisify(execFile);
 
 async function makeTempCodexHome(): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "t2code-provider-cli-sessions-"));
@@ -45,8 +48,62 @@ async function writeCodexSession(input: {
   await fs.writeFile(sessionFilePath, `${metadataLine}\n`, "utf8");
 }
 
+async function writeOpenCodeSession(input: {
+  dataHomePath: string;
+  sessionId: string;
+  directory: string;
+  createdAtMs: number;
+  title?: string;
+}): Promise<void> {
+  const databaseDirectory = path.join(input.dataHomePath, "opencode");
+  await fs.mkdir(databaseDirectory, { recursive: true });
+  const databasePath = path.join(databaseDirectory, "opencode.db");
+  const escapedDirectory = input.directory.replaceAll("'", "''");
+  const escapedTitle = (input.title ?? "Recovered session").replaceAll("'", "''");
+  const escapedSessionId = input.sessionId.replaceAll("'", "''");
+  await execFileAsync("sqlite3", [
+    databasePath,
+    `
+      CREATE TABLE IF NOT EXISTS session (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        parent_id TEXT,
+        slug TEXT NOT NULL,
+        directory TEXT NOT NULL,
+        title TEXT NOT NULL,
+        version TEXT NOT NULL,
+        share_url TEXT,
+        summary_additions INTEGER,
+        summary_deletions INTEGER,
+        summary_files INTEGER,
+        summary_diffs TEXT,
+        revert TEXT,
+        permission TEXT,
+        time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL,
+        time_compacting INTEGER,
+        time_archived INTEGER,
+        workspace_id TEXT
+      );
+      INSERT INTO session (
+        id, project_id, slug, directory, title, version, time_created, time_updated
+      ) VALUES (
+        '${escapedSessionId}',
+        'global',
+        '${escapedSessionId}',
+        '${escapedDirectory}',
+        '${escapedTitle}',
+        '0.0.0',
+        ${input.createdAtMs},
+        ${input.createdAtMs}
+      );
+    `,
+  ]);
+}
+
 describe("resolveProviderSession", () => {
   afterEach(async () => {
+    delete process.env.XDG_DATA_HOME;
     await Promise.all(
       tempDirectories
         .splice(0, tempDirectories.length)
@@ -154,6 +211,54 @@ describe("resolveProviderSession", () => {
         cwd,
         startedAt: "2026-04-06T19:58:50.000Z",
         codexHomePath,
+        excludeSessionId: sessionId,
+      }),
+    ).resolves.toEqual({ sessionId: null });
+  });
+
+  it("falls back to the opencode sqlite store when cli listing has no cwd match", async () => {
+    const dataHomePath = await makeTempCodexHome();
+    const cwd = "/Users/paul/development/investment_strats/social/dumbmoney";
+    const sessionId = "ses_29aff9092ffe7GjoyzBSFRpQ0F";
+    process.env.XDG_DATA_HOME = dataHomePath;
+
+    await writeOpenCodeSession({
+      dataHomePath,
+      sessionId,
+      directory: cwd,
+      createdAtMs: Date.parse("2026-04-08T21:47:20.589Z"),
+      title: "Greeting",
+    });
+
+    await expect(
+      resolveProviderSession({
+        provider: "opencode",
+        cwd,
+        startedAt: "2026-04-08T21:47:16.541Z",
+        openCodeBinaryPath: "/usr/bin/true",
+      }),
+    ).resolves.toEqual({ sessionId });
+  });
+
+  it("excludes sqlite fallback sessions that match excludeSessionId", async () => {
+    const dataHomePath = await makeTempCodexHome();
+    const cwd = "/Users/paul/development/investment_strats/social/dumbmoney";
+    const sessionId = "ses_29aff9092ffe7GjoyzBSFRpQ0F";
+    process.env.XDG_DATA_HOME = dataHomePath;
+
+    await writeOpenCodeSession({
+      dataHomePath,
+      sessionId,
+      directory: cwd,
+      createdAtMs: Date.parse("2026-04-08T21:47:20.589Z"),
+    });
+
+    await expect(
+      resolveProviderSession({
+        provider: "opencode",
+        cwd,
+        startedAt: "2026-04-08T21:47:16.541Z",
+        openCodeBinaryPath: "/usr/bin/true",
         excludeSessionId: sessionId,
       }),
     ).resolves.toEqual({ sessionId: null });

@@ -46,7 +46,7 @@ import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries";
 import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem";
 import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePaths";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner";
-import { resolveProviderSession } from "./providerCliSessions";
+import { createOpenCodeSession, resolveProviderSession } from "./providerCliSessions";
 
 const WsRpcLayer = WsRpcGroup.toLayer(
   Effect.gen(function* () {
@@ -530,6 +530,20 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(
           WS_METHODS.serverResolveProviderSession,
           Effect.promise(() => resolveProviderSession(input)),
+          {
+            "rpc.aggregate": "server",
+          },
+        ),
+      [WS_METHODS.serverCreateOpenCodeSession]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.serverCreateOpenCodeSession,
+          Effect.promise(() =>
+            createOpenCodeSession({
+              cwd: input.cwd,
+              ...(input.title ? { title: input.title } : {}),
+              ...(input.openCodeBinaryPath ? { binaryPath: input.openCodeBinaryPath } : {}),
+            }),
+          ),
           {
             "rpc.aggregate": "server",
           },

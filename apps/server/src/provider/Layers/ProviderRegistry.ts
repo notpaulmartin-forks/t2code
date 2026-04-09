@@ -8,19 +8,26 @@ import { Effect, Equal, Layer, PubSub, Ref, Stream } from "effect";
 
 import { ClaudeProviderLive } from "./ClaudeProvider";
 import { CodexProviderLive } from "./CodexProvider";
+import { OpenCodeProviderLive } from "./OpenCodeProvider";
 import type { ClaudeProviderShape } from "../Services/ClaudeProvider";
 import { ClaudeProvider } from "../Services/ClaudeProvider";
 import type { CodexProviderShape } from "../Services/CodexProvider";
 import { CodexProvider } from "../Services/CodexProvider";
+import type { OpenCodeProviderShape } from "../Services/OpenCodeProvider";
+import { OpenCodeProvider } from "../Services/OpenCodeProvider";
 import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry";
 
 const loadProviders = (
   codexProvider: CodexProviderShape,
+  openCodeProvider: OpenCodeProviderShape,
   claudeProvider: ClaudeProviderShape,
-): Effect.Effect<readonly [ServerProvider, ServerProvider]> =>
-  Effect.all([codexProvider.getSnapshot, claudeProvider.getSnapshot], {
-    concurrency: "unbounded",
-  });
+): Effect.Effect<readonly [ServerProvider, ServerProvider, ServerProvider]> =>
+  Effect.all(
+    [codexProvider.getSnapshot, openCodeProvider.getSnapshot, claudeProvider.getSnapshot],
+    {
+      concurrency: "unbounded",
+    },
+  );
 
 export const haveProvidersChanged = (
   previousProviders: ReadonlyArray<ServerProvider>,
@@ -31,20 +38,21 @@ export const ProviderRegistryLive = Layer.effect(
   ProviderRegistry,
   Effect.gen(function* () {
     const codexProvider = yield* CodexProvider;
+    const openCodeProvider = yield* OpenCodeProvider;
     const claudeProvider = yield* ClaudeProvider;
     const changesPubSub = yield* Effect.acquireRelease(
       PubSub.unbounded<ReadonlyArray<ServerProvider>>(),
       PubSub.shutdown,
     );
     const providersRef = yield* Ref.make<ReadonlyArray<ServerProvider>>(
-      yield* loadProviders(codexProvider, claudeProvider),
+      yield* loadProviders(codexProvider, openCodeProvider, claudeProvider),
     );
 
     const syncProviders = Effect.fn("syncProviders")(function* (options?: {
       readonly publish?: boolean;
     }) {
       const previousProviders = yield* Ref.get(providersRef);
-      const providers = yield* loadProviders(codexProvider, claudeProvider);
+      const providers = yield* loadProviders(codexProvider, openCodeProvider, claudeProvider);
       yield* Ref.set(providersRef, providers);
 
       if (options?.publish !== false && haveProvidersChanged(previousProviders, providers)) {
@@ -57,6 +65,9 @@ export const ProviderRegistryLive = Layer.effect(
     yield* Stream.runForEach(codexProvider.streamChanges, () => syncProviders()).pipe(
       Effect.forkScoped,
     );
+    yield* Stream.runForEach(openCodeProvider.streamChanges, () => syncProviders()).pipe(
+      Effect.forkScoped,
+    );
     yield* Stream.runForEach(claudeProvider.streamChanges, () => syncProviders()).pipe(
       Effect.forkScoped,
     );
@@ -66,13 +77,19 @@ export const ProviderRegistryLive = Layer.effect(
         case "codex":
           yield* codexProvider.refresh;
           break;
+        case "opencode":
+          yield* openCodeProvider.refresh;
+          break;
         case "claudeAgent":
           yield* claudeProvider.refresh;
           break;
         default:
-          yield* Effect.all([codexProvider.refresh, claudeProvider.refresh], {
-            concurrency: "unbounded",
-          });
+          yield* Effect.all(
+            [codexProvider.refresh, openCodeProvider.refresh, claudeProvider.refresh],
+            {
+              concurrency: "unbounded",
+            },
+          );
           break;
       }
       return yield* syncProviders();
@@ -93,4 +110,8 @@ export const ProviderRegistryLive = Layer.effect(
       },
     } satisfies ProviderRegistryShape;
   }),
-).pipe(Layer.provideMerge(CodexProviderLive), Layer.provideMerge(ClaudeProviderLive));
+).pipe(
+  Layer.provideMerge(CodexProviderLive),
+  Layer.provideMerge(OpenCodeProviderLive),
+  Layer.provideMerge(ClaudeProviderLive),
+);

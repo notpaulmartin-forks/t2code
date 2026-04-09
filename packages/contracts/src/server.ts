@@ -210,6 +210,7 @@ export const ServerResolveProviderSessionInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   startedAt: IsoDateTime,
   codexHomePath: Schema.optional(TrimmedNonEmptyString),
+  openCodeBinaryPath: Schema.optional(TrimmedNonEmptyString),
   excludeSessionId: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerResolveProviderSessionInput = typeof ServerResolveProviderSessionInput.Type;
@@ -219,8 +220,27 @@ export const ServerResolveProviderSessionResult = Schema.Struct({
 });
 export type ServerResolveProviderSessionResult = typeof ServerResolveProviderSessionResult.Type;
 
+export const ServerCreateOpenCodeSessionInput = Schema.Struct({
+  cwd: TrimmedNonEmptyString,
+  title: Schema.optional(TrimmedNonEmptyString),
+  openCodeBinaryPath: Schema.optional(TrimmedNonEmptyString),
+});
+export type ServerCreateOpenCodeSessionInput = typeof ServerCreateOpenCodeSessionInput.Type;
+
+export const ServerCreateOpenCodeSessionResult = Schema.Struct({
+  sessionId: TrimmedNonEmptyString,
+});
+export type ServerCreateOpenCodeSessionResult = typeof ServerCreateOpenCodeSessionResult.Type;
+
 export class ServerResolveProviderSessionError extends Schema.TaggedErrorClass<ServerResolveProviderSessionError>()(
   "ServerResolveProviderSessionError",
+  {
+    message: TrimmedNonEmptyString,
+  },
+) {}
+
+export class ServerCreateOpenCodeSessionError extends Schema.TaggedErrorClass<ServerCreateOpenCodeSessionError>()(
+  "ServerCreateOpenCodeSessionError",
   {
     message: TrimmedNonEmptyString,
   },

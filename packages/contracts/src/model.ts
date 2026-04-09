@@ -14,6 +14,9 @@ export const CodexModelOptions = Schema.Struct({
 });
 export type CodexModelOptions = typeof CodexModelOptions.Type;
 
+export const OpenCodeModelOptions = Schema.Struct({});
+export type OpenCodeModelOptions = typeof OpenCodeModelOptions.Type;
+
 export const ClaudeModelOptions = Schema.Struct({
   thinking: Schema.optional(Schema.Boolean),
   effort: Schema.optional(Schema.Literals(CLAUDE_CODE_EFFORT_OPTIONS)),
@@ -24,6 +27,7 @@ export type ClaudeModelOptions = typeof ClaudeModelOptions.Type;
 
 export const ProviderModelOptions = Schema.Struct({
   codex: Schema.optional(CodexModelOptions),
+  opencode: Schema.optional(OpenCodeModelOptions),
   claudeAgent: Schema.optional(ClaudeModelOptions),
 });
 export type ProviderModelOptions = typeof ProviderModelOptions.Type;
@@ -53,6 +57,7 @@ export type ModelCapabilities = typeof ModelCapabilities.Type;
 
 export const DEFAULT_MODEL_BY_PROVIDER: Record<ProviderKind, string> = {
   codex: "gpt-5.4",
+  opencode: "opencode/gpt-5.2-codex",
   claudeAgent: "claude-sonnet-4-6",
 };
 
@@ -61,6 +66,7 @@ export const DEFAULT_MODEL = DEFAULT_MODEL_BY_PROVIDER.codex;
 /** Per-provider text generation model defaults. */
 export const DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER: Record<ProviderKind, string> = {
   codex: "gpt-5.4-mini",
+  opencode: "opencode/gpt-5.2-codex",
   claudeAgent: "claude-haiku-4-5",
 };
 
@@ -71,6 +77,10 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER: Record<ProviderKind, Record<string,
     "gpt-5.3": "gpt-5.3-codex",
     "5.3-spark": "gpt-5.3-codex-spark",
     "gpt-5.3-spark": "gpt-5.3-codex-spark",
+  },
+  opencode: {
+    "gpt-5.2-codex": "opencode/gpt-5.2-codex",
+    "gpt-5.2": "opencode/gpt-5.2",
   },
   claudeAgent: {
     opus: "claude-opus-4-6",
@@ -92,5 +102,6 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER: Record<ProviderKind, Record<string,
 
 export const PROVIDER_DISPLAY_NAMES: Record<ProviderKind, string> = {
   codex: "Codex",
+  opencode: "OpenCode",
   claudeAgent: "Claude",
 };

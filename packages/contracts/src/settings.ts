@@ -6,6 +6,7 @@ import {
   ClaudeModelOptions,
   CodexModelOptions,
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
+  OpenCodeModelOptions,
 } from "./model";
 import { ModelSelection } from "./orchestration";
 
@@ -71,6 +72,13 @@ export const ClaudeSettings = Schema.Struct({
 });
 export type ClaudeSettings = typeof ClaudeSettings.Type;
 
+export const OpenCodeSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  binaryPath: makeBinaryPathSetting("opencode"),
+  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
+});
+export type OpenCodeSettings = typeof OpenCodeSettings.Type;
+
 export const ObservabilitySettings = Schema.Struct({
   otlpTracesUrl: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
   otlpMetricsUrl: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
@@ -92,6 +100,7 @@ export const ServerSettings = Schema.Struct({
   // Provider specific settings
   providers: Schema.Struct({
     codex: CodexSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    opencode: OpenCodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
   }).pipe(Schema.withDecodingDefault(() => ({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(() => ({}))),
@@ -135,11 +144,20 @@ const ClaudeModelOptionsPatch = Schema.Struct({
   contextWindow: Schema.optionalKey(ClaudeModelOptions.fields.contextWindow),
 });
 
+const OpenCodeModelOptionsPatch = Schema.Struct({
+  ...OpenCodeModelOptions.fields,
+});
+
 const ModelSelectionPatch = Schema.Union([
   Schema.Struct({
     provider: Schema.optionalKey(Schema.Literal("codex")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(CodexModelOptionsPatch),
+  }),
+  Schema.Struct({
+    provider: Schema.optionalKey(Schema.Literal("opencode")),
+    model: Schema.optionalKey(TrimmedNonEmptyString),
+    options: Schema.optionalKey(OpenCodeModelOptionsPatch),
   }),
   Schema.Struct({
     provider: Schema.optionalKey(Schema.Literal("claudeAgent")),
@@ -161,6 +179,12 @@ const ClaudeSettingsPatch = Schema.Struct({
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+const OpenCodeSettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  binaryPath: Schema.optionalKey(Schema.String),
+  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
 export const ServerSettingsPatch = Schema.Struct({
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
@@ -174,6 +198,7 @@ export const ServerSettingsPatch = Schema.Struct({
   providers: Schema.optionalKey(
     Schema.Struct({
       codex: Schema.optionalKey(CodexSettingsPatch),
+      opencode: Schema.optionalKey(OpenCodeSettingsPatch),
       claudeAgent: Schema.optionalKey(ClaudeSettingsPatch),
     }),
   ),

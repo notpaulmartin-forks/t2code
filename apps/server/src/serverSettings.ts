@@ -101,7 +101,10 @@ const PROVIDER_ORDER: readonly ProviderKind[] = ["codex", "claudeAgent"];
  */
 function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings {
   const selection = settings.textGenerationModelSelection;
-  if (settings.providers[selection.provider].enabled) {
+  if (
+    (selection.provider === "codex" || selection.provider === "claudeAgent") &&
+    settings.providers[selection.provider].enabled
+  ) {
     return settings;
   }
 

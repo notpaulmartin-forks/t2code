@@ -63,6 +63,9 @@ import {
 import {
   ServerConfigStreamEvent,
   ServerConfig,
+  ServerCreateOpenCodeSessionError,
+  ServerCreateOpenCodeSessionInput,
+  ServerCreateOpenCodeSessionResult,
   ServerResolveProviderSessionError,
   ServerResolveProviderSessionInput,
   ServerResolveProviderSessionResult,
@@ -112,6 +115,7 @@ export const WS_METHODS = {
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
   serverResolveProviderSession: "server.resolveProviderSession",
+  serverCreateOpenCodeSession: "server.createOpenCodeSession",
 
   // Streaming subscriptions
   subscribeOrchestrationDomainEvents: "subscribeOrchestrationDomainEvents",
@@ -153,6 +157,12 @@ export const WsServerResolveProviderSessionRpc = Rpc.make(WS_METHODS.serverResol
   payload: ServerResolveProviderSessionInput,
   success: ServerResolveProviderSessionResult,
   error: ServerResolveProviderSessionError,
+});
+
+export const WsServerCreateOpenCodeSessionRpc = Rpc.make(WS_METHODS.serverCreateOpenCodeSession, {
+  payload: ServerCreateOpenCodeSessionInput,
+  success: ServerCreateOpenCodeSessionResult,
+  error: ServerCreateOpenCodeSessionError,
 });
 
 export const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntries, {
@@ -338,6 +348,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
   WsServerResolveProviderSessionRpc,
+  WsServerCreateOpenCodeSessionRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,

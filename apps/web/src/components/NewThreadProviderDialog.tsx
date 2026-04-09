@@ -4,8 +4,9 @@ import {
   PROVIDER_DISPLAY_NAMES,
   type ServerProvider,
 } from "@t3tools/contracts";
+import { projectScriptCwd } from "@t3tools/shared/projectScripts";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ClaudeAI, OpenAI } from "./Icons";
+import { ClaudeAI, OpenAI, OpenCodeIcon } from "./Icons";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -30,6 +31,7 @@ import { newCommandId } from "../lib/utils";
 import { useTerminalStateStore } from "../terminalStateStore";
 import { toastManager } from "./ui/toast";
 import { cn } from "../lib/utils";
+import { useProjectById } from "../storeSelectors";
 import {
   buildDefaultThreadTitle,
   buildProviderLaunchCommand,
@@ -46,6 +48,12 @@ const PROVIDER_OPTIONS: ReadonlyArray<{
     label: "Codex",
     subtitle: "Open a Codex terminal in the selected thread.",
     Icon: OpenAI,
+  },
+  {
+    provider: "opencode",
+    label: "OpenCode",
+    subtitle: "Open an OpenCode terminal in the selected thread.",
+    Icon: OpenCodeIcon,
   },
   {
     provider: "claudeAgent",
@@ -114,6 +122,7 @@ export function NewThreadProviderDialog() {
   const setOpen = useNewThreadDialogStore((state) => state.setOpen);
   const setSelectedProvider = useNewThreadDialogStore((state) => state.setSelectedProvider);
   const settings = useSettings();
+  const project = useProjectById(request?.projectId);
   const serverProviders = useServerProviders();
   const { handleNewThread } = useHandleNewThread();
   const setModelSelection = useComposerDraftStore((state) => state.setModelSelection);
@@ -175,6 +184,25 @@ export function NewThreadProviderDialog() {
         });
         const threadTitle = buildDefaultThreadTitle(provider);
         const startedAt = new Date().toISOString();
+        const cwd =
+          project &&
+          projectScriptCwd({
+            project: { cwd: project.cwd },
+            worktreePath: request.worktreePath ?? null,
+          });
+        const explicitOpenCodeSessionId =
+          provider === "opencode" && cwd
+            ? (
+                await api.server.createOpenCodeSession({
+                  cwd,
+                  title: threadTitle,
+                  ...(settings.providers.opencode.binaryPath.trim().length > 0
+                    ? { openCodeBinaryPath: settings.providers.opencode.binaryPath.trim() }
+                    : {}),
+                })
+              ).sessionId
+            : null;
+        const startupSessionId = provider === "claudeAgent" ? threadId : explicitOpenCodeSessionId;
 
         setModelSelection(threadId, modelSelection);
         setStickyModelSelection(modelSelection);
@@ -182,11 +210,11 @@ export function NewThreadProviderDialog() {
         setTerminalStartupRequest(threadId, {
           provider,
           startedAt,
-          ...(provider === "claudeAgent" ? { sessionId: threadId } : {}),
+          ...(startupSessionId ? { sessionId: startupSessionId } : {}),
           command: buildProviderLaunchCommand({
             provider,
             settings,
-            sessionId: provider === "claudeAgent" ? threadId : null,
+            sessionId: startupSessionId,
             title: threadTitle,
           }),
         });
@@ -220,6 +248,7 @@ export function NewThreadProviderDialog() {
       closeDialog,
       ensureTerminal,
       handleNewThread,
+      project,
       request,
       serverProviders,
       setModelSelection,
@@ -266,7 +295,11 @@ export function NewThreadProviderDialog() {
                   <Icon
                     className={cn(
                       "size-5 shrink-0",
-                      provider === "claudeAgent" ? "text-[#d97757]" : "text-foreground",
+                      provider === "claudeAgent"
+                        ? "text-[#d97757]"
+                        : provider === "opencode"
+                          ? "text-sky-500"
+                          : "text-foreground",
                     )}
                   />
                   <span className="text-sm font-medium text-foreground">{label}</span>

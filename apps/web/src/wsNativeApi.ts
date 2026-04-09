@@ -93,6 +93,7 @@ export function createWsNativeApi(): NativeApi {
       getSettings: rpcClient.server.getSettings,
       updateSettings: rpcClient.server.updateSettings,
       resolveProviderSession: rpcClient.server.resolveProviderSession,
+      createOpenCodeSession: rpcClient.server.createOpenCodeSession,
     },
     orchestration: {
       getSnapshot: rpcClient.orchestration.getSnapshot,

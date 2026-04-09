@@ -417,6 +417,28 @@ function isCsiFinalByte(codePoint: number): boolean {
   return codePoint >= 0x40 && codePoint <= 0x7e;
 }
 
+const REPLAY_UNSAFE_PRIVATE_MODES = new Set([
+  "1000",
+  "1002",
+  "1003",
+  "1005",
+  "1006",
+  "1015",
+  "1016",
+]);
+
+function shouldStripPrivateModeSequence(body: string, finalByte: string): boolean {
+  if ((finalByte !== "h" && finalByte !== "l") || !body.startsWith("?")) {
+    return false;
+  }
+  const modes = body
+    .slice(1)
+    .split(";")
+    .map((mode) => mode.trim())
+    .filter((mode) => mode.length > 0);
+  return modes.length > 0 && modes.every((mode) => REPLAY_UNSAFE_PRIVATE_MODES.has(mode));
+}
+
 function shouldStripCsiSequence(body: string, finalByte: string): boolean {
   if (finalByte === "n") {
     return true;
@@ -427,10 +449,20 @@ function shouldStripCsiSequence(body: string, finalByte: string): boolean {
   if (finalByte === "c" && /^[>0-9;?]*$/.test(body)) {
     return true;
   }
+  if (finalByte === "p" && /^[0-9;?]*[$]$/.test(body)) {
+    return true;
+  }
+  if (shouldStripPrivateModeSequence(body, finalByte)) {
+    return true;
+  }
   return false;
 }
 
 function shouldStripOscSequence(content: string): boolean {
+  const parts = content.split(";");
+  if (parts[0] === "4" && parts.at(-1) === "?") {
+    return true;
+  }
   return /^(10|11|12);(?:\?|rgb:)/.test(content);
 }
 
@@ -585,6 +617,10 @@ function sanitizeTerminalHistoryChunk(
   }
 
   return { visibleText, pendingControlSequence: "" };
+}
+
+function sanitizeReplayableTerminalOutput(data: string): string {
+  return sanitizeTerminalHistoryChunk("", data).visibleText;
 }
 
 function legacySafeThreadId(threadId: string): string {
@@ -926,7 +962,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
         const raw = yield* fileSystem
           .readFileString(nextPath)
           .pipe(Effect.mapError(toTerminalHistoryError("read", threadId, terminalId)));
-        const capped = capHistory(raw, historyLineLimit);
+        const capped = capHistory(sanitizeReplayableTerminalOutput(raw), historyLineLimit);
         if (capped !== raw) {
           yield* fileSystem
             .writeFileString(nextPath, capped)
@@ -951,7 +987,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       const raw = yield* fileSystem
         .readFileString(legacyPath)
         .pipe(Effect.mapError(toTerminalHistoryError("migrate", threadId, terminalId)));
-      const capped = capHistory(raw, historyLineLimit);
+      const capped = capHistory(sanitizeReplayableTerminalOutput(raw), historyLineLimit);
       yield* fileSystem
         .writeFileString(nextPath, capped)
         .pipe(Effect.mapError(toTerminalHistoryError("migrate", threadId, terminalId)));
@@ -1149,7 +1185,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
               threadId: session.threadId,
               terminalId: session.terminalId,
               history: sanitized.visibleText.length > 0 ? session.history : null,
-              data: nextEvent.data,
+              data: sanitized.visibleText,
             } as const;
           }
 
@@ -1188,6 +1224,9 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
         if (action.type === "output") {
           if (action.history !== null) {
             yield* queuePersist(action.threadId, action.terminalId, action.history);
+          }
+          if (action.data.length === 0) {
+            continue;
           }
 
           yield* publishEvent({

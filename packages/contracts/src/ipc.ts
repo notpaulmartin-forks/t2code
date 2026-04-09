@@ -24,9 +24,11 @@ import type {
 } from "./project";
 import type {
   ServerConfig,
+  ServerCreateOpenCodeSessionInput,
+  ServerCreateOpenCodeSessionResult,
+  ServerProviderUpdatedPayload,
   ServerResolveProviderSessionInput,
   ServerResolveProviderSessionResult,
-  ServerProviderUpdatedPayload,
   ServerUpsertKeybindingResult,
 } from "./server";
 import type {
@@ -176,6 +178,9 @@ export interface NativeApi {
     resolveProviderSession: (
       input: ServerResolveProviderSessionInput,
     ) => Promise<ServerResolveProviderSessionResult>;
+    createOpenCodeSession: (
+      input: ServerCreateOpenCodeSessionInput,
+    ) => Promise<ServerCreateOpenCodeSessionResult>;
   };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;

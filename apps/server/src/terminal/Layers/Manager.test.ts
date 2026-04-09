@@ -628,6 +628,9 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
       process.emitData("\u001b[32mok\u001b[0m ");
       process.emitData("\u001b]11;rgb:ffff/ffff/ffff\u0007");
       process.emitData("\u001b[1;1R");
+      process.emitData("\u001b[?1016$p\u001b[?2027$p");
+      process.emitData("\u001b]4;0;?\u0007\u001b]4;15;?\u0007");
+      process.emitData("\u001b[?1000h\u001b[?1006h");
       process.emitData("done\n");
 
       yield* manager.close({ threadId: "thread-1" });
@@ -662,6 +665,40 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
           "before clear\n\u001b[H\u001b[2Jprompt \u001b[36mdone\u001b[0m\n",
         );
       }),
+  );
+
+  it.effect("drops replay-unsafe mouse tracking sequences from live terminal events", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter, getEvents } = yield* createManager(5, {
+        ptyAdapter: new FakePtyAdapter("async"),
+      });
+
+      yield* manager.open(openInput());
+      const process = ptyAdapter.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+
+      process.emitData("prompt ");
+      process.emitData("\u001b[?1016$p\u001b[?2027$p");
+      process.emitData("\u001b]4;0;?\u0007");
+      process.emitData("\u001b[?1000h\u001b[?1006h");
+      process.emitData("done\n");
+
+      yield* waitFor(
+        Effect.map(getEvents, (events) =>
+          events.some((event) => event.type === "output" && event.data === "done\n"),
+        ),
+        "1200 millis",
+      );
+
+      const outputEvents = (yield* getEvents).filter(
+        (event): event is Extract<TerminalEvent, { type: "output" }> => event.type === "output",
+      );
+      expect(outputEvents).toEqual([
+        expect.objectContaining({ type: "output", data: "prompt " }),
+        expect.objectContaining({ type: "output", data: "done\n" }),
+      ]);
+    }),
   );
 
   it.effect("does not leak final bytes from ESC sequences with intermediate bytes", () =>

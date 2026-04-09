@@ -1,7 +1,7 @@
 # T2 Code is a fork of [T3 Code](https://github.com/pingdotgg/t3code)
 
 - **Tracking removed!**
-- **Uses the CLIs** (claude code / codex / opencode) inside the T2 Code App instead of the chat UI since it's often broken. *Chats are still accessible via the sidebar
+- **Uses the CLIs** (claude code / codex / opencode) inside the T2 Code App instead of the chat UI since it's often broken. \*Chats are still accessible via the sidebar
 - Added **OpenCode support**
 
 Forked at version 0.15.0 (commit [cf2c62](https://github.com/pingdotgg/t3code/commit/cf2c62))
